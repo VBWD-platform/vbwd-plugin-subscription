@@ -1,0 +1,65 @@
+[
+  {
+    "event_type": "subscription.activated",
+    "subject": "Welcome to {{ plan_name }}, {{ user_name }}!",
+    "html_body": "<h1>Your subscription is active</h1><p>Hi {{ user_name }},</p><p>Your <strong>{{ plan_name }}</strong> subscription is now active.</p><p><a href=\"{{ dashboard_url }}\">Go to your dashboard</a></p>",
+    "text_body": "Hi {{ user_name }},\n\nYour {{ plan_name }} subscription is active.\n\nDashboard: {{ dashboard_url }}",
+    "is_active": true
+  },
+  {
+    "event_type": "subscription.cancelled",
+    "subject": "Subscription cancelled — {{ plan_name }}",
+    "html_body": "<h1>Subscription cancelled</h1><p>Hi {{ user_name }},</p><p>Your <strong>{{ plan_name }}</strong> subscription has been cancelled. Access continues until {{ end_date }}.</p>",
+    "text_body": "Hi {{ user_name }},\n\nYour {{ plan_name }} subscription has been cancelled.\nAccess continues until {{ end_date }}.",
+    "is_active": true
+  },
+  {
+    "event_type": "subscription.payment_failed",
+    "subject": "Payment failed — {{ plan_name }}",
+    "html_body": "<h1>Payment failed</h1><p>Hi {{ user_name }},</p><p>We couldn't process payment for your <strong>{{ plan_name }}</strong> subscription.</p><p><a href=\"{{ update_payment_url }}\">Update payment method</a></p>",
+    "text_body": "Hi {{ user_name }},\n\nPayment failed for {{ plan_name }}.\n\nUpdate payment: {{ update_payment_url }}",
+    "is_active": true
+  },
+  {
+    "event_type": "subscription.renewed",
+    "subject": "Subscription renewed — {{ plan_name }}",
+    "html_body": "<h1>Subscription renewed</h1><p>Hi {{ user_name }},</p><p>Your <strong>{{ plan_name }}</strong> subscription has been renewed. Next billing date: {{ next_billing_date }}.</p>",
+    "text_body": "Hi {{ user_name }},\n\nYour {{ plan_name }} subscription has been renewed.\nNext billing: {{ next_billing_date }}.",
+    "is_active": true
+  },
+  {
+    "event_type": "subscription.expired",
+    "subject": "Subscription expired — {{ plan_name }}",
+    "html_body": "<h1>Subscription expired</h1><p>Hi {{ user_name }},</p><p>Your <strong>{{ plan_name }}</strong> subscription has expired.</p><p><a href=\"{{ resubscribe_url }}\">Resubscribe</a></p>",
+    "text_body": "Hi {{ user_name }},\n\nYour {{ plan_name }} subscription has expired.\n\nResubscribe: {{ resubscribe_url }}",
+    "is_active": true
+  },
+  {
+    "event_type": "subscription.upgraded",
+    "subject": "Plan upgraded to {{ plan_name }}",
+    "html_body": "<h1>Plan upgraded!</h1><p>Hi {{ user_name }},</p><p>Your subscription has been upgraded to <strong>{{ plan_name }}</strong>. Changes take effect immediately.</p>",
+    "text_body": "Hi {{ user_name }},\n\nYour plan has been upgraded to {{ plan_name }}.",
+    "is_active": true
+  },
+  {
+    "event_type": "subscription.downgraded",
+    "subject": "Plan changed to {{ plan_name }}",
+    "html_body": "<h1>Plan changed</h1><p>Hi {{ user_name }},</p><p>Your subscription has been changed to <strong>{{ plan_name }}</strong>. Changes take effect at the end of your current billing period.</p>",
+    "text_body": "Hi {{ user_name }},\n\nYour plan has been changed to {{ plan_name }}.\nChanges take effect at end of current billing period.",
+    "is_active": true
+  },
+  {
+    "event_type": "trial.started",
+    "subject": "Your free trial has started!",
+    "html_body": "<h1>Welcome to your free trial!</h1><p>Hi {{ user_name }},</p><p>Your {{ trial_days }}-day free trial of <strong>{{ plan_name }}</strong> has started.</p><p><a href=\"{{ dashboard_url }}\">Get started</a></p>",
+    "text_body": "Hi {{ user_name }},\n\nYour {{ trial_days }}-day trial of {{ plan_name }} has started.\n\nGet started: {{ dashboard_url }}",
+    "is_active": true
+  },
+  {
+    "event_type": "trial.expiring_soon",
+    "subject": "Your trial expires in {{ days_remaining }} days",
+    "html_body": "<h1>Trial expiring soon</h1><p>Hi {{ user_name }},</p><p>Your free trial of <strong>{{ plan_name }}</strong> expires in {{ days_remaining }} days.</p><p><a href=\"{{ upgrade_url }}\">Subscribe now</a></p>",
+    "text_body": "Hi {{ user_name }},\n\nYour trial expires in {{ days_remaining }} days.\n\nSubscribe: {{ upgrade_url }}",
+    "is_active": true
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "trial_days": 14,
+  "dunning_intervals_days": [3, 7],
+  "expiration_check_interval_seconds": 60,
+  "max_subscriptions_per_user": 10,
+  "allow_downgrade": true,
+  "proration_enabled": true
+}

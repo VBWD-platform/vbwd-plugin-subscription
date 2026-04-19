@@ -1,0 +1,1 @@
+"""Subscription plugin test configuration."""
