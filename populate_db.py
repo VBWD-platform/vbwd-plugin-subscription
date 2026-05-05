@@ -108,6 +108,16 @@ def populate(app=None):
     db.session.commit()
     logger.info("[subscription] populate_db complete")
 
+    # Seed the checkout-confirmation page so /checkout/confirmation resolves
+    # on every instance (subscription is enabled on all verticals). Idempotent
+    # — safe even when shop/booking populate it too.
+    try:
+        from plugins.checkout.populate_db import populate_checkout_cms
+
+        populate_checkout_cms()
+    except ImportError:
+        logger.info("[subscription] checkout plugin not installed — skipping checkout-confirmation page")
+
     # Email templates
     _populate_email_templates()
 
