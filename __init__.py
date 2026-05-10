@@ -118,6 +118,29 @@ class SubscriptionPlugin(BasePlugin):
                 "(checkout.requested, subscription.cancelled)"
             )
 
+        # Self-heal: ensure the /checkout/confirmation CMS page exists.
+        # The fe-user `checkout` plugin's /checkout/confirmation route loads
+        # CmsPage with slug="checkout-confirmation"; if the row is missing,
+        # users see a 404 after paying. Subscription is enabled on every
+        # instance, so seeding here guarantees the page is present after
+        # any deploy — independent of whether `seed_data=true` was passed.
+        # `populate_checkout_cms()` is idempotent (uses _get_or_create), so
+        # this is safe to run on every boot.
+        try:
+            from plugins.checkout.populate_db import populate_checkout_cms
+
+            populate_checkout_cms()
+        except ImportError:
+            logger.info(
+                "[subscription] checkout plugin not installed — "
+                "skipping checkout-confirmation page self-heal"
+            )
+        except Exception as seed_error:  # noqa: BLE001 — never break boot for a seed failure
+            logger.warning(
+                "[subscription] Failed to self-heal checkout-confirmation page: %s",
+                seed_error,
+            )
+
         # Start scheduler
         try:
             from plugins.subscription.subscription.scheduler import (
