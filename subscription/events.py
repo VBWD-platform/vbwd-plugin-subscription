@@ -1,9 +1,10 @@
-"""Subscription domain events."""
-from dataclasses import dataclass
+"""Subscription and checkout domain events."""
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
-from uuid import UUID
 from decimal import Decimal
+from typing import List, Optional
+from uuid import UUID
+
 from vbwd.events.domain import DomainEvent
 
 
@@ -150,13 +151,6 @@ class PaymentFailedEvent(DomainEvent):
             self.data = {}
         if not hasattr(self, "propagation_stopped"):
             self.propagation_stopped = False
-
-
-"""Checkout domain events."""
-from dataclasses import dataclass, field
-from typing import List, Optional
-from uuid import UUID
-from vbwd.events.domain import DomainEvent
 
 
 @dataclass

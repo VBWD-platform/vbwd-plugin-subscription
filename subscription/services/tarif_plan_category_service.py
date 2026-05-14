@@ -2,8 +2,12 @@
 import re
 from typing import Optional, List
 from uuid import UUID
-from plugins.subscription.subscription.repositories.tarif_plan_category_repository import TarifPlanCategoryRepository
-from plugins.subscription.subscription.repositories.tarif_plan_repository import TarifPlanRepository
+from plugins.subscription.subscription.repositories.tarif_plan_category_repository import (
+    TarifPlanCategoryRepository,
+)
+from plugins.subscription.subscription.repositories.tarif_plan_repository import (
+    TarifPlanRepository,
+)
 from plugins.subscription.subscription.models import TarifPlanCategory
 
 

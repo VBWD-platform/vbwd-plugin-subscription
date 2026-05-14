@@ -5,8 +5,12 @@ from flask import jsonify, request
 from decimal import Decimal
 from sqlalchemy import func
 from vbwd.middleware.auth import require_auth, require_admin, require_permission
-from plugins.subscription.subscription.repositories.tarif_plan_repository import TarifPlanRepository
-from plugins.subscription.subscription.repositories.subscription_repository import SubscriptionRepository
+from plugins.subscription.subscription.repositories.tarif_plan_repository import (
+    TarifPlanRepository,
+)
+from plugins.subscription.subscription.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
 from vbwd.extensions import db
 from plugins.subscription.subscription.models import TarifPlan
 from plugins.subscription.subscription.models import Subscription
@@ -255,7 +259,9 @@ def admin_delete_plan(plan_id):
     return jsonify({"message": "Plan deleted successfully"}), 200
 
 
-@subscription_bp.route("/api/v1/admin/tarif-plans/<plan_id>/deactivate", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/admin/tarif-plans/<plan_id>/deactivate", methods=["POST"]
+)
 @require_auth
 @require_admin
 @require_permission("subscription.plans.manage")
@@ -315,7 +321,7 @@ def admin_activate_plan(plan_id):
 @require_permission("subscription.plans.manage")
 def admin_archive_plan(plan_id):
     """Archive (deactivate) a tariff plan. Alias for /deactivate for backwards compat."""
-    return deactivate_plan(plan_id)
+    return admin_deactivate_plan(plan_id)
 
 
 @subscription_bp.route("/api/v1/admin/tarif-plans/<plan_id>/copy", methods=["POST"])

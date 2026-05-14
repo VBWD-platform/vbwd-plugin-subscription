@@ -115,9 +115,7 @@ class TestOnSubscriptionCancelled:
             },
         )
 
-        mock_service.revoke_plan_linked_levels.assert_called_once_with(
-            user_id, "basic"
-        )
+        mock_service.revoke_plan_linked_levels.assert_called_once_with(user_id, "basic")
         mock_service.find_by_slug.assert_called_once_with(FALLBACK_LEVEL_SLUG)
         mock_service.assign.assert_called_once_with(user_id, fallback_level.id)
 
@@ -171,9 +169,7 @@ class TestOnSubscriptionCancelled:
 
     def test_handles_service_exception(self, handler, mock_service):
         """Should not raise when service throws."""
-        mock_service.revoke_plan_linked_levels.side_effect = RuntimeError(
-            "DB error"
-        )
+        mock_service.revoke_plan_linked_levels.side_effect = RuntimeError("DB error")
 
         handler.on_subscription_cancelled(
             "subscription.cancelled",

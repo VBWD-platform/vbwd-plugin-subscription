@@ -1,12 +1,21 @@
 #!/usr/bin/env python
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 """Run subscription populate_db inside the running Flask app context."""
-from vbwd.app import create_app
+import os
+import sys
 
-app = create_app()
-with app.app_context():
+
+def main() -> None:
+    sys.path.insert(
+        0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    )
+    from vbwd.app import create_app
     from plugins.subscription.populate_db import populate
-    populate(app)
-    print("Subscription populate complete.")
+
+    app = create_app()
+    with app.app_context():
+        populate(app)
+        print("Subscription populate complete.")
+
+
+if __name__ == "__main__":
+    main()

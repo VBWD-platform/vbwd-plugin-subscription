@@ -55,7 +55,15 @@ def admin_create_category():
             is_single=data.get("is_single", True),
             sort_order=int(data.get("sort_order", 0)),
         )
-        return jsonify({"category": category.to_dict(), "message": "Category created successfully"}), 201
+        return (
+            jsonify(
+                {
+                    "category": category.to_dict(),
+                    "message": "Category created successfully",
+                }
+            ),
+            201,
+        )
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
 

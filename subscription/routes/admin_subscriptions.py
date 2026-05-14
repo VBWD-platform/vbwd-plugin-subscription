@@ -4,10 +4,16 @@ from datetime import datetime, timedelta
 from vbwd.utils.datetime_utils import utcnow
 from dateutil.relativedelta import relativedelta  # type: ignore[import-untyped]
 from vbwd.middleware.auth import require_auth, require_admin, require_permission
-from plugins.subscription.subscription.repositories.subscription_repository import SubscriptionRepository
+from plugins.subscription.subscription.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
 from vbwd.repositories.user_repository import UserRepository
-from plugins.subscription.subscription.repositories.tarif_plan_repository import TarifPlanRepository
-from plugins.subscription.subscription.services.subscription_service import SubscriptionService
+from plugins.subscription.subscription.repositories.tarif_plan_repository import (
+    TarifPlanRepository,
+)
+from plugins.subscription.subscription.services.subscription_service import (
+    SubscriptionService,
+)
 from vbwd.extensions import db
 from plugins.subscription.subscription.models import Subscription
 from vbwd.models.invoice import UserInvoice
@@ -349,7 +355,9 @@ def admin_get_subscription(subscription_id):
     return jsonify({"subscription": sub_dict}), 200
 
 
-@subscription_bp.route("/api/v1/admin/subscriptions/<subscription_id>/extend", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/admin/subscriptions/<subscription_id>/extend", methods=["POST"]
+)
 @require_auth
 @require_admin
 @require_permission("subscription.subscriptions.manage")
@@ -392,7 +400,9 @@ def admin_extend_subscription(subscription_id):
     )
 
 
-@subscription_bp.route("/api/v1/admin/subscriptions/<subscription_id>/cancel", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/admin/subscriptions/<subscription_id>/cancel", methods=["POST"]
+)
 @require_auth
 @require_admin
 @require_permission("subscription.subscriptions.manage")
@@ -428,7 +438,9 @@ def admin_cancel_subscription(subscription_id):
     )
 
 
-@subscription_bp.route("/api/v1/admin/subscriptions/<subscription_id>/activate", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/admin/subscriptions/<subscription_id>/activate", methods=["POST"]
+)
 @require_auth
 @require_admin
 @require_permission("subscription.subscriptions.manage")
@@ -480,7 +492,9 @@ def admin_activate_subscription(subscription_id):
     )
 
 
-@subscription_bp.route("/api/v1/admin/subscriptions/<subscription_id>/refund", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/admin/subscriptions/<subscription_id>/refund", methods=["POST"]
+)
 @require_auth
 @require_admin
 @require_permission("subscription.subscriptions.manage")

@@ -47,7 +47,5 @@ def start_subscription_scheduler(app, interval_seconds=60):
         replace_existing=True,
     )
     scheduler.start()
-    logger.info(
-        "[subscription] Scheduler started (interval=%ds)", interval_seconds
-    )
+    logger.info("[subscription] Scheduler started (interval=%ds)", interval_seconds)
     return scheduler

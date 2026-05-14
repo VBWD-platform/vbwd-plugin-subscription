@@ -4,8 +4,12 @@ from vbwd.utils.datetime_utils import utcnow
 from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
-from plugins.subscription.subscription.repositories.subscription_repository import SubscriptionRepository
-from plugins.subscription.subscription.repositories.tarif_plan_repository import TarifPlanRepository
+from plugins.subscription.subscription.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
+from plugins.subscription.subscription.repositories.tarif_plan_repository import (
+    TarifPlanRepository,
+)
 from plugins.subscription.subscription.models import Subscription
 from vbwd.models.invoice import UserInvoice
 from vbwd.models.enums import (

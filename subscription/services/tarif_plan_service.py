@@ -2,7 +2,9 @@
 from typing import Optional, List
 from uuid import UUID
 from decimal import Decimal
-from plugins.subscription.subscription.repositories.tarif_plan_repository import TarifPlanRepository
+from plugins.subscription.subscription.repositories.tarif_plan_repository import (
+    TarifPlanRepository,
+)
 from plugins.subscription.subscription.models import TarifPlan
 
 

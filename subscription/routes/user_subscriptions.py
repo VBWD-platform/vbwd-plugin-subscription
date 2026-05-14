@@ -2,9 +2,15 @@
 from flask import jsonify, g, request
 from vbwd.extensions import db
 from vbwd.middleware.auth import require_auth
-from plugins.subscription.subscription.repositories.subscription_repository import SubscriptionRepository
-from plugins.subscription.subscription.repositories.tarif_plan_repository import TarifPlanRepository
-from plugins.subscription.subscription.services.subscription_service import SubscriptionService
+from plugins.subscription.subscription.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
+from plugins.subscription.subscription.repositories.tarif_plan_repository import (
+    TarifPlanRepository,
+)
+from plugins.subscription.subscription.services.subscription_service import (
+    SubscriptionService,
+)
 from vbwd.utils.validation import parse_uuid
 from plugins.subscription.subscription.routes import subscription_bp
 
@@ -176,7 +182,9 @@ def get_all_active_subscriptions():
     return jsonify({"subscriptions": result}), 200
 
 
-@subscription_bp.route("/api/v1/user/subscriptions/<subscription_id>/cancel", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/user/subscriptions/<subscription_id>/cancel", methods=["POST"]
+)
 @require_auth
 def cancel_subscription(subscription_id: str):
     """
@@ -220,7 +228,9 @@ def cancel_subscription(subscription_id: str):
     )
 
 
-@subscription_bp.route("/api/v1/user/subscriptions/<subscription_id>/pause", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/user/subscriptions/<subscription_id>/pause", methods=["POST"]
+)
 @require_auth
 def pause_subscription(subscription_id: str):
     """
@@ -260,7 +270,9 @@ def pause_subscription(subscription_id: str):
     )
 
 
-@subscription_bp.route("/api/v1/user/subscriptions/<subscription_id>/resume", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/user/subscriptions/<subscription_id>/resume", methods=["POST"]
+)
 @require_auth
 def resume_subscription(subscription_id: str):
     """
@@ -300,7 +312,9 @@ def resume_subscription(subscription_id: str):
     )
 
 
-@subscription_bp.route("/api/v1/user/subscriptions/<subscription_id>/upgrade", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/user/subscriptions/<subscription_id>/upgrade", methods=["POST"]
+)
 @require_auth
 def upgrade_subscription(subscription_id: str):
     """
@@ -352,7 +366,9 @@ def upgrade_subscription(subscription_id: str):
     )
 
 
-@subscription_bp.route("/api/v1/user/subscriptions/<subscription_id>/downgrade", methods=["POST"])
+@subscription_bp.route(
+    "/api/v1/user/subscriptions/<subscription_id>/downgrade", methods=["POST"]
+)
 @require_auth
 def downgrade_subscription(subscription_id: str):
     """
@@ -404,7 +420,9 @@ def downgrade_subscription(subscription_id: str):
     )
 
 
-@subscription_bp.route("/api/v1/user/subscriptions/<subscription_id>/proration", methods=["GET"])
+@subscription_bp.route(
+    "/api/v1/user/subscriptions/<subscription_id>/proration", methods=["GET"]
+)
 @require_auth
 def get_proration(subscription_id: str):
     """

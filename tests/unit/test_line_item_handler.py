@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from vbwd.events.line_item_registry import LineItemContext, LineItemResult
+from vbwd.events.line_item_registry import LineItemContext
 from plugins.subscription.subscription.handlers.line_item_handler import (
     SubscriptionLineItemHandler,
 )

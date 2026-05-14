@@ -12,12 +12,15 @@ logger = logging.getLogger(__name__)
 
 def populate(app=None):
     """Populate subscription demo data (idempotent)."""
-    from plugins.subscription.subscription.models import TarifPlan, TarifPlanCategory, AddOn
+    from plugins.subscription.subscription.models import (
+        TarifPlan,
+        TarifPlanCategory,
+    )
 
     # Category
-    category = db.session.query(TarifPlanCategory).filter_by(
-        slug="subscription-plans"
-    ).first()
+    category = (
+        db.session.query(TarifPlanCategory).filter_by(slug="subscription-plans").first()
+    )
     if not category:
         from uuid import uuid4
 
@@ -116,7 +119,9 @@ def populate(app=None):
 
         populate_checkout_cms()
     except ImportError:
-        logger.info("[subscription] checkout plugin not installed — skipping checkout-confirmation page")
+        logger.info(
+            "[subscription] checkout plugin not installed — skipping checkout-confirmation page"
+        )
 
     # Email templates
     _populate_email_templates()
@@ -129,7 +134,10 @@ def _populate_email_templates():
 
     templates_path = os.path.join(
         os.path.dirname(__file__),
-        "docs", "imports", "email", "subscription-email-templates.json",
+        "docs",
+        "imports",
+        "email",
+        "subscription-email-templates.json",
     )
     if not os.path.exists(templates_path):
         return
@@ -145,16 +153,22 @@ def _populate_email_templates():
         templates = json.load(fh)
 
     for tpl in templates:
-        existing = db.session.query(EmailTemplate).filter_by(event_type=tpl["event_type"]).first()
+        existing = (
+            db.session.query(EmailTemplate)
+            .filter_by(event_type=tpl["event_type"])
+            .first()
+        )
         if not existing:
-            db.session.add(EmailTemplate(
-                id=uuid4(),
-                event_type=tpl["event_type"],
-                subject=tpl["subject"],
-                html_body=tpl["html_body"],
-                text_body=tpl["text_body"],
-                is_active=tpl.get("is_active", True),
-            ))
+            db.session.add(
+                EmailTemplate(
+                    id=uuid4(),
+                    event_type=tpl["event_type"],
+                    subject=tpl["subject"],
+                    html_body=tpl["html_body"],
+                    text_body=tpl["text_body"],
+                    is_active=tpl.get("is_active", True),
+                )
+            )
             logger.info("[subscription] Created email template: %s", tpl["event_type"])
 
     db.session.commit()

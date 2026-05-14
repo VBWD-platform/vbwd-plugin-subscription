@@ -2,11 +2,17 @@
 import uuid
 from flask import request, jsonify
 from vbwd.extensions import db
-from plugins.subscription.subscription.repositories.tarif_plan_repository import TarifPlanRepository
-from plugins.subscription.subscription.repositories.tarif_plan_category_repository import TarifPlanCategoryRepository
+from plugins.subscription.subscription.repositories.tarif_plan_repository import (
+    TarifPlanRepository,
+)
+from plugins.subscription.subscription.repositories.tarif_plan_category_repository import (
+    TarifPlanCategoryRepository,
+)
 from vbwd.repositories.currency_repository import CurrencyRepository
 from vbwd.repositories.tax_repository import TaxRepository
-from plugins.subscription.subscription.services.tarif_plan_service import TarifPlanService
+from plugins.subscription.subscription.services.tarif_plan_service import (
+    TarifPlanService,
+)
 from vbwd.services.currency_service import CurrencyService
 from vbwd.services.tax_service import TaxService
 from plugins.subscription.subscription.routes import subscription_bp

@@ -100,6 +100,4 @@ class SubscriptionAccessLevelHandler:
                     )
 
         except Exception as error:
-            logger.warning(
-                "[access-level] Failed to handle cancellation: %s", error
-            )
+            logger.warning("[access-level] Failed to handle cancellation: %s", error)

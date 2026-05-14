@@ -1,7 +1,9 @@
 """Public add-on routes (for user checkout and catalog)."""
 from flask import jsonify, g
 from vbwd.middleware.auth import optional_auth
-from plugins.subscription.subscription.repositories.addon_repository import AddOnRepository
+from plugins.subscription.subscription.repositories.addon_repository import (
+    AddOnRepository,
+)
 from vbwd.extensions import db
 from plugins.subscription.subscription.models import Subscription
 from vbwd.models.enums import SubscriptionStatus

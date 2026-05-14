@@ -40,12 +40,36 @@ class SubscriptionPlugin(BasePlugin):
     @property
     def admin_permissions(self):
         return [
-            {"key": "subscription.plans.view", "label": "View plans", "group": "Subscriptions"},
-            {"key": "subscription.plans.manage", "label": "Manage plans", "group": "Subscriptions"},
-            {"key": "subscription.subscriptions.view", "label": "View subscriptions", "group": "Subscriptions"},
-            {"key": "subscription.subscriptions.manage", "label": "Manage subscriptions", "group": "Subscriptions"},
-            {"key": "subscription.addons.manage", "label": "Manage add-ons", "group": "Subscriptions"},
-            {"key": "subscription.configure", "label": "Subscription settings", "group": "Subscriptions"},
+            {
+                "key": "subscription.plans.view",
+                "label": "View plans",
+                "group": "Subscriptions",
+            },
+            {
+                "key": "subscription.plans.manage",
+                "label": "Manage plans",
+                "group": "Subscriptions",
+            },
+            {
+                "key": "subscription.subscriptions.view",
+                "label": "View subscriptions",
+                "group": "Subscriptions",
+            },
+            {
+                "key": "subscription.subscriptions.manage",
+                "label": "Manage subscriptions",
+                "group": "Subscriptions",
+            },
+            {
+                "key": "subscription.addons.manage",
+                "label": "Manage add-ons",
+                "group": "Subscriptions",
+            },
+            {
+                "key": "subscription.configure",
+                "label": "Subscription settings",
+                "group": "Subscriptions",
+            },
         ]
 
     @property
@@ -135,7 +159,9 @@ class SubscriptionPlugin(BasePlugin):
                 "[subscription] checkout plugin not installed — "
                 "skipping checkout-confirmation page self-heal"
             )
-        except Exception as seed_error:  # noqa: BLE001 — never break boot for a seed failure
+        except (
+            Exception
+        ) as seed_error:  # noqa: BLE001 — never break boot for a seed failure
             logger.warning(
                 "[subscription] Failed to self-heal checkout-confirmation page: %s",
                 seed_error,
@@ -210,7 +236,9 @@ class SubscriptionPlugin(BasePlugin):
 
         container = getattr(current_app, "container", None)
         if not container:
-            logger.warning("[subscription] No container — cannot register line item handler")
+            logger.warning(
+                "[subscription] No container — cannot register line item handler"
+            )
             return
 
         from plugins.subscription.subscription.handlers.line_item_handler import (

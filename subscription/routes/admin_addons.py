@@ -3,7 +3,9 @@ import re
 from flask import jsonify, request
 from decimal import Decimal
 from vbwd.middleware.auth import require_auth, require_admin, require_permission
-from plugins.subscription.subscription.repositories.addon_repository import AddOnRepository
+from plugins.subscription.subscription.repositories.addon_repository import (
+    AddOnRepository,
+)
 from vbwd.extensions import db
 from plugins.subscription.subscription.models import AddOn
 from plugins.subscription.subscription.models import TarifPlan
