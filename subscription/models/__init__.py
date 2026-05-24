@@ -1,13 +1,16 @@
 """Subscription plugin models.
 
-During transition (04b): re-exports from core.
-After core cleanup (04c): plugin owns these models directly.
+The plugin owns these model classes directly (Sprint 11 / S5). Core defines
+none of them — the subscription↔invoice link is the invoice's SUBSCRIPTION
+line item, not a core FK.
 """
-from vbwd.models.subscription import Subscription
-from vbwd.models.tarif_plan import TarifPlan
-from vbwd.models.addon import AddOn, addon_tarif_plans
-from vbwd.models.addon_subscription import AddOnSubscription
-from vbwd.models.tarif_plan_category import (
+from plugins.subscription.subscription.models.subscription import Subscription
+from plugins.subscription.subscription.models.tarif_plan import TarifPlan
+from plugins.subscription.subscription.models.addon import AddOn, addon_tarif_plans
+from plugins.subscription.subscription.models.addon_subscription import (
+    AddOnSubscription,
+)
+from plugins.subscription.subscription.models.tarif_plan_category import (
     TarifPlanCategory,
     tarif_plan_category_plans,
 )

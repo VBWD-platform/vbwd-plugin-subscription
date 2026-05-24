@@ -4,7 +4,7 @@ The feature-gating logic relocated from core `FeatureGuard` (Sprint 03/S3),
 now implementing the generic core `IEntitlementProvider` port. Behaviour is
 unchanged (E2): plan features + free-tier fallback + usage limits.
 """
-from typing import Optional, Dict, Tuple, Set
+from typing import Any, Optional, Dict, Tuple, Set
 from uuid import UUID
 
 from vbwd.services.entitlement import IEntitlementProvider
@@ -81,6 +81,25 @@ class SubscriptionEntitlementProvider(IEntitlementProvider):
             return True, remaining - amount
 
         return False, remaining
+
+    def get_feature_value(
+        self, user_id: UUID, feature_name: str, default: Any = None
+    ) -> Any:
+        # Read a plan-feature value for the user's active (ACTIVE/TRIALING) plan.
+        # Mirrors taro's prior direct read of tarif_plan.features[name].
+        subscription = self.subscription_repo.find_active_by_user(user_id)
+        if not subscription or not subscription.tarif_plan:
+            return default
+        features = subscription.tarif_plan.features
+        if isinstance(features, dict):
+            return features.get(feature_name, default)
+        return default
+
+    def current_plan_name(self, user_id: UUID) -> Optional[str]:
+        subscription = self.subscription_repo.find_active_by_user(user_id)
+        if subscription and subscription.tarif_plan:
+            return subscription.tarif_plan.name
+        return None
 
     def get_feature_limits(self, user_id: UUID) -> Dict[str, dict]:
         subscription = self.subscription_repo.find_active_by_user(user_id)

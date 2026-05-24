@@ -203,6 +203,43 @@ class SubscriptionPlugin(BasePlugin):
         register_subscription_read_model(SubscriptionReadModel())
         logger.info("[subscription] Subscription read model registered")
 
+        from vbwd.services.deletion_dependency_registry import (
+            register_deletion_dependency_provider,
+        )
+
+        def _subscription_deletion_dependency(user_id):
+            count = SubscriptionReadModel().count_user_subscriptions(user_id)
+            if count > 0:
+                return {
+                    "type": "subscription",
+                    "count": count,
+                    "label": "Subscriptions",
+                }
+            return None
+
+        register_deletion_dependency_provider(
+            "subscription", _subscription_deletion_dependency
+        )
+        logger.info("[subscription] Deletion-dependency provider registered")
+
+        from vbwd.services.catalog_read_model import register_catalog_read_model
+        from plugins.subscription.subscription.services.catalog_read_model import (
+            CatalogReadModel,
+        )
+
+        register_catalog_read_model(CatalogReadModel())
+        logger.info("[subscription] Catalog read model registered")
+
+        from vbwd.services.subscription_lifecycle import (
+            register_subscription_lifecycle,
+        )
+        from plugins.subscription.subscription.services.subscription_lifecycle import (
+            SubscriptionLifecycle,
+        )
+
+        register_subscription_lifecycle(SubscriptionLifecycle())
+        logger.info("[subscription] Subscription lifecycle registered")
+
         from vbwd.services.demo_data_registry import (
             register_catalog_seeder,
             register_test_data_seeder,
@@ -259,11 +296,21 @@ class SubscriptionPlugin(BasePlugin):
         from vbwd.services.subscription_read_model import (
             clear_subscription_read_model,
         )
+        from vbwd.services.catalog_read_model import clear_catalog_read_model
+        from vbwd.services.subscription_lifecycle import (
+            clear_subscription_lifecycle,
+        )
         from vbwd.services.demo_data_registry import clear_demo_data_hooks
+        from vbwd.services.deletion_dependency_registry import (
+            unregister_deletion_dependency_provider,
+        )
 
         clear_entitlement_provider()
         clear_subscription_read_model()
+        clear_catalog_read_model()
+        clear_subscription_lifecycle()
         clear_demo_data_hooks()
+        unregister_deletion_dependency_provider("subscription")
 
     def register_event_handlers(self, event_bus):
         import logging

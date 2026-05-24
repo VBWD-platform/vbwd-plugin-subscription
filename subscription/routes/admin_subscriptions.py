@@ -17,7 +17,13 @@ from plugins.subscription.subscription.services.subscription_service import (
 from vbwd.extensions import db
 from plugins.subscription.subscription.models import Subscription
 from vbwd.models.invoice import UserInvoice
-from vbwd.models.enums import SubscriptionStatus, InvoiceStatus, BillingPeriod
+from vbwd.models.invoice_line_item import InvoiceLineItem
+from vbwd.models.enums import (
+    SubscriptionStatus,
+    InvoiceStatus,
+    BillingPeriod,
+    LineItemType,
+)
 from plugins.subscription.subscription.routes import subscription_bp
 
 
@@ -164,17 +170,27 @@ def admin_create_subscription():
     db.session.add(subscription)
     db.session.flush()
 
-    # Create invoice
+    # Create invoice. The subscription/plan link is the SUBSCRIPTION line item
+    # (item_id == subscription.id), not a column on the invoice.
+    amount = plan.price or plan.price_float or 0
     invoice = UserInvoice()
     invoice.user_id = user.id
-    invoice.tarif_plan_id = plan.id
-    invoice.subscription_id = subscription.id
     invoice.invoice_number = UserInvoice.generate_invoice_number()
-    invoice.amount = plan.price or plan.price_float or 0
+    invoice.amount = amount
     invoice.currency = plan.currency or "EUR"
     invoice.status = InvoiceStatus.PENDING
     invoice.invoiced_at = utcnow()
     invoice.expires_at = utcnow() + timedelta(days=30)
+    invoice.line_items.append(
+        InvoiceLineItem(
+            item_type=LineItemType.SUBSCRIPTION,
+            item_id=subscription.id,
+            description=plan.name,
+            quantity=1,
+            unit_price=amount,
+            total_price=amount,
+        )
+    )
     db.session.add(invoice)
 
     db.session.commit()

@@ -100,6 +100,37 @@ class SubscriptionLineItemHandler(ILineItemHandler):
             )
         return False
 
+    def recurring_billing_spec(self, line_item):
+        """(name, billing_period) for recurring SUBSCRIPTION/ADD_ON items.
+
+        None for one-off items or items this plugin does not own — so payment
+        providers only set up recurring charges for genuinely recurring plans.
+        """
+        from vbwd.events.line_item_registry import RecurringBillingSpec
+        from vbwd.extensions import db
+        from plugins.subscription.subscription.models import (
+            Subscription,
+            AddOnSubscription,
+        )
+
+        if line_item.item_type == LineItemType.SUBSCRIPTION:
+            subscription = db.session.get(Subscription, line_item.item_id)
+            plan = subscription.tarif_plan if subscription else None
+            if plan and plan.is_recurring:
+                return RecurringBillingSpec(
+                    name=plan.name, billing_period=plan.billing_period.value
+                )
+            return None
+        if line_item.item_type == LineItemType.ADD_ON:
+            addon_subscription = db.session.get(AddOnSubscription, line_item.item_id)
+            addon = addon_subscription.addon if addon_subscription else None
+            if addon and addon.is_recurring:
+                return RecurringBillingSpec(
+                    name=addon.name, billing_period=addon.billing_period
+                )
+            return None
+        return None
+
     # ── Activation ────────────────────────────────────────────────────────
 
     def _activate_subscription(

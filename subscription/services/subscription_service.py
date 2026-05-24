@@ -12,10 +12,12 @@ from plugins.subscription.subscription.repositories.tarif_plan_repository import
 )
 from plugins.subscription.subscription.models import Subscription
 from vbwd.models.invoice import UserInvoice
+from vbwd.models.invoice_line_item import InvoiceLineItem
 from vbwd.models.enums import (
     SubscriptionStatus,
     BillingPeriod,
     InvoiceStatus,
+    LineItemType,
     TokenTransactionType,
 )
 
@@ -354,16 +356,27 @@ class SubscriptionService:
             self._subscription_repo.save(subscription)
 
             plan = subscription.tarif_plan
+            amount = plan.price or plan.price_float or 0
             invoice = UserInvoice()
             invoice.user_id = subscription.user_id
-            invoice.tarif_plan_id = plan.id
-            invoice.subscription_id = subscription.id
             invoice.invoice_number = UserInvoice.generate_invoice_number()
-            invoice.amount = plan.price or plan.price_float or 0
+            invoice.amount = amount
             invoice.currency = plan.currency or "EUR"
             invoice.status = InvoiceStatus.PENDING
             invoice.invoiced_at = utcnow()
             invoice.expires_at = utcnow() + timedelta(days=30)
+            # Link to the subscription via a SUBSCRIPTION line item (the link is
+            # no longer a column on the core invoice).
+            invoice.line_items.append(
+                InvoiceLineItem(
+                    item_type=LineItemType.SUBSCRIPTION,
+                    item_id=subscription.id,
+                    description=plan.name if plan else "Subscription",
+                    quantity=1,
+                    unit_price=amount,
+                    total_price=amount,
+                )
+            )
             invoice_repo.save(invoice)
 
             results.append(

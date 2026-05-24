@@ -205,12 +205,11 @@ class CheckoutHandler(IEventHandler):
                 )
                 total_amount += addon.price
 
-            # 4. Create invoice with all line items
+            # 4. Create invoice with all line items. The subscription/plan link
+            #    is carried by the SUBSCRIPTION line item below, not a column.
             invoice = UserInvoice(
                 id=uuid4(),
                 user_id=event.user_id,
-                tarif_plan_id=event.plan_id,
-                subscription_id=subscription.id if subscription else None,
                 invoice_number=UserInvoice.generate_invoice_number(),
                 amount=total_amount,
                 subtotal=total_amount,

@@ -25,13 +25,6 @@ class SubscriptionReadModel(ISubscriptionReadModel):
 
         return SubscriptionRepository(self._session())
 
-    def _tarif_plan_repo(self):
-        from plugins.subscription.subscription.repositories.tarif_plan_repository import (  # noqa: E501
-            TarifPlanRepository,
-        )
-
-        return TarifPlanRepository(self._session())
-
     def _addon_subscription_repo(self):
         from plugins.subscription.subscription.repositories.addon_subscription_repository import (  # noqa: E501
             AddOnSubscriptionRepository,
@@ -44,50 +37,69 @@ class SubscriptionReadModel(ISubscriptionReadModel):
 
         return InvoiceRepository(self._session())
 
+    def _subscription_for_invoice(self, invoice: Any):
+        """Resolve the invoice's subscription via its SUBSCRIPTION line item.
+
+        Core invoices carry no subscription column; the link is the line item
+        whose item_id is the subscription id.
+        """
+        from vbwd.models.enums import LineItemType
+
+        for line_item in getattr(invoice, "line_items", None) or []:
+            if line_item.item_type == LineItemType.SUBSCRIPTION:
+                return self._subscription_repo().find_by_id(str(line_item.item_id))
+        return None
+
     def enrich_invoice(self, invoice: Any) -> Dict[str, Any]:
         enrichment: Dict[str, Any] = {}
 
-        if getattr(invoice, "tarif_plan_id", None):
-            plan = self._tarif_plan_repo().find_by_id(str(invoice.tarif_plan_id))
-            if plan:
-                enrichment["plan_name"] = plan.name
-                enrichment["plan_description"] = plan.description
-                enrichment["plan_billing_period"] = (
-                    plan.billing_period.value if plan.billing_period else None
-                )
-                enrichment["plan_price"] = str(plan.price) if plan.price else None
+        subscription = self._subscription_for_invoice(invoice)
+        if not subscription:
+            return enrichment
 
-        if getattr(invoice, "subscription_id", None):
-            subscription = self._subscription_repo().find_by_id(
-                str(invoice.subscription_id)
+        plan = subscription.tarif_plan
+        if plan:
+            enrichment["plan_name"] = plan.name
+            enrichment["plan_description"] = plan.description
+            enrichment["plan_billing_period"] = (
+                plan.billing_period.value if plan.billing_period else None
             )
-            if subscription:
-                enrichment["subscription_status"] = (
-                    subscription.status.value if subscription.status else None
-                )
-                enrichment["subscription_start_date"] = (
-                    subscription.started_at.isoformat()
-                    if subscription.started_at
-                    else None
-                )
-                enrichment["subscription_end_date"] = (
-                    subscription.expires_at.isoformat()
-                    if subscription.expires_at
-                    else None
-                )
-                enrichment["subscription_is_trial"] = (
-                    subscription.trial_end_at is not None
-                )
-                enrichment["subscription_trial_end"] = (
-                    subscription.trial_end_at.isoformat()
-                    if subscription.trial_end_at
-                    else None
-                )
+            enrichment["plan_price"] = str(plan.price) if plan.price else None
+
+        enrichment["subscription_status"] = (
+            subscription.status.value if subscription.status else None
+        )
+        enrichment["subscription_start_date"] = (
+            subscription.started_at.isoformat() if subscription.started_at else None
+        )
+        enrichment["subscription_end_date"] = (
+            subscription.expires_at.isoformat() if subscription.expires_at else None
+        )
+        enrichment["subscription_is_trial"] = subscription.trial_end_at is not None
+        enrichment["subscription_trial_end"] = (
+            subscription.trial_end_at.isoformat()
+            if subscription.trial_end_at
+            else None
+        )
 
         return enrichment
 
     def count_user_subscriptions(self, user_id: UUID) -> int:
         return len(self._subscription_repo().find_by_user(user_id))
+
+    def active_subscription_count(self) -> int:
+        # ACTIVE only — matches the analytics dashboard's prior direct query.
+        from sqlalchemy import func
+        from plugins.subscription.subscription.models import Subscription
+        from vbwd.models.enums import SubscriptionStatus
+
+        return (
+            self._session()
+            .query(func.count(Subscription.id))
+            .filter(Subscription.status == SubscriptionStatus.ACTIVE)
+            .scalar()
+            or 0
+        )
 
     def user_addon_subscriptions(self, user_id: UUID) -> List[Dict[str, Any]]:
         addon_sub_repo = self._addon_subscription_repo()
