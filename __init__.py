@@ -277,19 +277,26 @@ class SubscriptionPlugin(BasePlugin):
                 seed_error,
             )
 
-        # Start scheduler
-        try:
-            from plugins.subscription.subscription.scheduler import (
-                start_subscription_scheduler,
-            )
+        # Start scheduler — but never in tests. Each test builds its own app and
+        # runs on_enable, so an unguarded scheduler spins up one background
+        # thread (and its DB work) per test app, leaking threads/connections
+        # across a full-suite run. Core guards its booking scheduler the same
+        # way (see vbwd/app.py).
+        if not current_app.config.get("TESTING"):
+            try:
+                from plugins.subscription.subscription.scheduler import (
+                    start_subscription_scheduler,
+                )
 
-            config = getattr(self, "config", {}) or {}
-            interval = config.get("expiration_check_interval_seconds", 60)
-            start_subscription_scheduler(current_app._get_current_object(), interval)
-        except Exception as scheduler_error:
-            logger.warning(
-                "[subscription] Failed to start scheduler: %s", scheduler_error
-            )
+                config = getattr(self, "config", {}) or {}
+                interval = config.get("expiration_check_interval_seconds", 60)
+                start_subscription_scheduler(
+                    current_app._get_current_object(), interval
+                )
+            except Exception as scheduler_error:
+                logger.warning(
+                    "[subscription] Failed to start scheduler: %s", scheduler_error
+                )
 
     def on_disable(self):
         from vbwd.services.entitlement import clear_entitlement_provider
