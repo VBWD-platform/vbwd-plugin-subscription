@@ -1,0 +1,18 @@
+Your subscription is now active!
+
+Hi {{ first_name }},
+
+Great news! Your {{ plan_name }} subscription has been activated successfully.
+
+Subscription Details:
+- Plan: {{ plan_name }}
+- Valid until: {{ expires_at }}
+
+You now have access to all the features included in your plan.
+
+Go to Dashboard: https://vbwd.com/dashboard
+
+Thank you for choosing VBWD!
+
+---
+(c) {{ year }} VBWD. All rights reserved.

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Payment Receipt</h2>
+<p>Hi {{ first_name }},</p>
+<p>Thank you for your payment. Here are the details of your transaction:</p>
+<div class="info-box">
+    <p><strong>Receipt Details:</strong></p>
+    <ul>
+        <li>Invoice Number: {{ invoice_number }}</li>
+        <li>Amount Paid: {{ amount }}</li>
+        <li>Date: {{ year }}</li>
+    </ul>
+</div>
+<p>This payment has been processed successfully. A PDF copy of your receipt is attached to this email.</p>
+<p><a href="https://vbwd.com/invoices" class="button">View All Invoices</a></p>
+<p>Thank you for your business!</p>
+{% endblock %}

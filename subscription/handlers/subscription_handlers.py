@@ -1,4 +1,6 @@
 """Subscription event handlers."""
+from datetime import datetime
+
 from vbwd.events.domain import IEventHandler, DomainEvent, EventResult
 from vbwd.events.subscription_events import (
     SubscriptionActivatedEvent,
@@ -50,11 +52,19 @@ class SubscriptionActivatedHandler(IEventHandler):
 
             # Send activation confirmation email if service available
             if self._email_service and event.user_email:
-                result = self._email_service.send_subscription_activated(
-                    to_email=event.user_email,
-                    first_name=event.first_name or "User",
-                    plan_name=event.plan_name or "Subscription",
-                    expires_at=event.expires_at,
+                plan_name = event.plan_name or "Subscription"
+                result = self._email_service.send_template(
+                    to=event.user_email,
+                    template="subscription_activated",
+                    context={
+                        "first_name": event.first_name or "User",
+                        "plan_name": plan_name,
+                        "expires_at": event.expires_at.strftime("%Y-%m-%d")
+                        if event.expires_at
+                        else "",
+                        "year": datetime.now().year,
+                    },
+                    subject=f"Your {plan_name} subscription is now active!",
                 )
                 email_sent = result.success
 
@@ -113,10 +123,16 @@ class SubscriptionCancelledHandler(IEventHandler):
 
             # Send cancellation confirmation email if service available
             if self._email_service and event.user_email:
-                result = self._email_service.send_subscription_cancelled(
-                    to_email=event.user_email,
-                    first_name=event.first_name or "User",
-                    plan_name=event.plan_name or "Subscription",
+                plan_name = event.plan_name or "Subscription"
+                result = self._email_service.send_template(
+                    to=event.user_email,
+                    template="subscription_cancelled",
+                    context={
+                        "first_name": event.first_name or "User",
+                        "plan_name": plan_name,
+                        "year": datetime.now().year,
+                    },
+                    subject=f"Your {plan_name} subscription has been cancelled",
                 )
                 email_sent = result.success
 
@@ -182,11 +198,17 @@ class PaymentCompletedHandler(IEventHandler):
             # Send payment receipt email if service available
             if self._email_service and event.user_email:
                 amount_str = f"{event.amount} {event.currency}" if event.amount else ""
-                result = self._email_service.send_payment_receipt(
-                    to_email=event.user_email,
-                    first_name=event.first_name or "User",
-                    invoice_number=event.invoice_number or event.transaction_id,
-                    amount=amount_str,
+                invoice_number = event.invoice_number or event.transaction_id
+                result = self._email_service.send_template(
+                    to=event.user_email,
+                    template="payment_receipt",
+                    context={
+                        "first_name": event.first_name or "User",
+                        "invoice_number": invoice_number,
+                        "amount": amount_str,
+                        "year": datetime.now().year,
+                    },
+                    subject=f"Payment Receipt - {invoice_number}",
                 )
                 email_sent = result.success
 
@@ -246,11 +268,16 @@ class PaymentFailedHandler(IEventHandler):
 
             # Send payment failure notification if service available
             if self._email_service and event.user_email:
-                result = self._email_service.send_payment_failed(
-                    to_email=event.user_email,
-                    first_name=event.first_name or "User",
-                    plan_name=event.plan_name or "Subscription",
-                    retry_url=event.retry_url or "https://vbwd.com/retry",
+                result = self._email_service.send_template(
+                    to=event.user_email,
+                    template="payment_failed",
+                    context={
+                        "first_name": event.first_name or "User",
+                        "plan_name": event.plan_name or "Subscription",
+                        "retry_url": event.retry_url or "https://vbwd.com/retry",
+                        "year": datetime.now().year,
+                    },
+                    subject="Payment Failed - Action Required",
                 )
                 email_sent = result.success
 

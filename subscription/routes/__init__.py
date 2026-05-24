@@ -13,6 +13,7 @@ from plugins.subscription.subscription.routes import (  # noqa: F401, E402
     user_subscriptions,
     user_plans,
     user_addons,
+    user_checkout,
     admin_subscriptions,
     admin_plans,
     admin_addons,

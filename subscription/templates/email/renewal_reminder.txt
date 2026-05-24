@@ -1,0 +1,19 @@
+Subscription Renewal Reminder
+
+Hi {{ first_name }},
+
+Just a friendly reminder that your {{ plan_name }} subscription will renew in {{ days_until_renewal }} days.
+
+What happens next:
+- Your subscription will automatically renew
+- Your payment method on file will be charged
+- You'll continue to have uninterrupted access
+
+If you need to update your payment method or make any changes to your subscription, please do so before the renewal date.
+
+Manage Subscription: https://vbwd.com/account/subscription
+
+Thank you for being a VBWD member!
+
+---
+(c) {{ year }} VBWD. All rights reserved.

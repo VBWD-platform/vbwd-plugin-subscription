@@ -121,6 +121,49 @@ class SubscriptionPlugin(BasePlugin):
 
         container = getattr(current_app, "container", None)
         if container:
+            # Register the subscription-domain repository providers on the
+            # shared DI container. Core declares none of these (they were
+            # extracted to this plugin), so the plugin must add them — the
+            # checkout/cancel handlers, line-item handlers, and other plugins
+            # (e.g. yookassa) resolve them via container.<name>().
+            from dependency_injector import providers
+            from plugins.subscription.subscription.repositories.subscription_repository import (
+                SubscriptionRepository,
+            )
+            from plugins.subscription.subscription.repositories.addon_subscription_repository import (
+                AddOnSubscriptionRepository,
+            )
+            from plugins.subscription.subscription.repositories.addon_repository import (
+                AddOnRepository,
+            )
+            from plugins.subscription.subscription.repositories.tarif_plan_repository import (
+                TarifPlanRepository,
+            )
+            from plugins.subscription.subscription.repositories.tarif_plan_category_repository import (
+                TarifPlanCategoryRepository,
+            )
+
+            container.subscription_repository = providers.Factory(
+                SubscriptionRepository, session=container.db_session
+            )
+            container.addon_subscription_repository = providers.Factory(
+                AddOnSubscriptionRepository, session=container.db_session
+            )
+            container.addon_repository = providers.Factory(
+                AddOnRepository, session=container.db_session
+            )
+            container.tarif_plan_repository = providers.Factory(
+                TarifPlanRepository, session=container.db_session
+            )
+            container.tarif_plan_category_repository = providers.Factory(
+                TarifPlanCategoryRepository, session=container.db_session
+            )
+            logger.info(
+                "[subscription] DI repository providers registered "
+                "(subscription, addon, addon_subscription, tarif_plan, "
+                "tarif_plan_category)"
+            )
+
             dispatcher = container.event_dispatcher()
 
             from plugins.subscription.subscription.handlers.checkout_handler import (
@@ -141,6 +184,36 @@ class SubscriptionPlugin(BasePlugin):
                 "[subscription] Domain event handlers registered "
                 "(checkout.requested, subscription.cancelled)"
             )
+
+        from vbwd.services.entitlement import register_entitlement_provider
+        from plugins.subscription.subscription.services.subscription_entitlement_provider import (  # noqa: E501
+            SubscriptionEntitlementProvider,
+        )
+
+        register_entitlement_provider(SubscriptionEntitlementProvider())
+        logger.info("[subscription] Entitlement provider registered")
+
+        from vbwd.services.subscription_read_model import (
+            register_subscription_read_model,
+        )
+        from plugins.subscription.subscription.services.subscription_read_model import (  # noqa: E501
+            SubscriptionReadModel,
+        )
+
+        register_subscription_read_model(SubscriptionReadModel())
+        logger.info("[subscription] Subscription read model registered")
+
+        from vbwd.services.demo_data_registry import (
+            register_catalog_seeder,
+            register_test_data_seeder,
+            register_test_data_cleaner,
+        )
+        from plugins.subscription.subscription import demo_seed
+
+        register_catalog_seeder(demo_seed.seed_catalog)
+        register_test_data_seeder(demo_seed.seed_test_data)
+        register_test_data_cleaner(demo_seed.clean_test_data)
+        logger.info("[subscription] Demo/test data hooks registered")
 
         # Self-heal: ensure the /checkout/confirmation CMS page exists.
         # The fe-user `checkout` plugin's /checkout/confirmation route loads
@@ -182,7 +255,15 @@ class SubscriptionPlugin(BasePlugin):
             )
 
     def on_disable(self):
-        pass
+        from vbwd.services.entitlement import clear_entitlement_provider
+        from vbwd.services.subscription_read_model import (
+            clear_subscription_read_model,
+        )
+        from vbwd.services.demo_data_registry import clear_demo_data_hooks
+
+        clear_entitlement_provider()
+        clear_subscription_read_model()
+        clear_demo_data_hooks()
 
     def register_event_handlers(self, event_bus):
         import logging

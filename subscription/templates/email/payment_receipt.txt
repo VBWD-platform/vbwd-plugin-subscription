@@ -1,0 +1,19 @@
+Payment Receipt
+
+Hi {{ first_name }},
+
+Thank you for your payment. Here are the details of your transaction:
+
+Receipt Details:
+- Invoice Number: {{ invoice_number }}
+- Amount Paid: {{ amount }}
+- Date: {{ year }}
+
+This payment has been processed successfully. A PDF copy of your receipt is attached to this email.
+
+View All Invoices: https://vbwd.com/invoices
+
+Thank you for your business!
+
+---
+(c) {{ year }} VBWD. All rights reserved.

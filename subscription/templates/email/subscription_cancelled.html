@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Subscription Cancelled</h2>
+<p>Hi {{ first_name }},</p>
+<p>Your <strong>{{ plan_name }}</strong> subscription has been cancelled as requested.</p>
+<div class="info-box">
+    <p>Your access to premium features will remain active until the end of your current billing period.</p>
+</div>
+<p>We're sorry to see you go. If you change your mind, you can resubscribe at any time.</p>
+<p><a href="https://vbwd.com/plans" class="button">View Plans</a></p>
+<p>If you have any feedback about why you cancelled, we'd love to hear from you.</p>
+{% endblock %}

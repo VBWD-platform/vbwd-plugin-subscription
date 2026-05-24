@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Subscription Renewal Reminder</h2>
+<p>Hi {{ first_name }},</p>
+<p>Just a friendly reminder that your <strong>{{ plan_name }}</strong> subscription will renew in <strong>{{ days_until_renewal }} days</strong>.</p>
+<div class="info-box">
+    <p><strong>What happens next:</strong></p>
+    <ul>
+        <li>Your subscription will automatically renew</li>
+        <li>Your payment method on file will be charged</li>
+        <li>You'll continue to have uninterrupted access</li>
+    </ul>
+</div>
+<p>If you need to update your payment method or make any changes to your subscription, please do so before the renewal date.</p>
+<p><a href="https://vbwd.com/account/subscription" class="button">Manage Subscription</a></p>
+<p>Thank you for being a VBWD member!</p>
+{% endblock %}

@@ -1,0 +1,467 @@
+{
+  "vbwd_addon": {
+    "columns": {
+      "billing_period": {
+        "nullable": false,
+        "type": "VARCHAR(50)"
+      },
+      "config": {
+        "nullable": false,
+        "type": "JSONB"
+      },
+      "created_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "currency": {
+        "nullable": false,
+        "type": "VARCHAR(3)"
+      },
+      "description": {
+        "nullable": true,
+        "type": "TEXT"
+      },
+      "id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "is_active": {
+        "nullable": false,
+        "type": "BOOLEAN"
+      },
+      "name": {
+        "nullable": false,
+        "type": "VARCHAR(255)"
+      },
+      "price": {
+        "nullable": false,
+        "type": "NUMERIC(10, 2)"
+      },
+      "slug": {
+        "nullable": false,
+        "type": "VARCHAR(255)"
+      },
+      "sort_order": {
+        "nullable": false,
+        "type": "INTEGER"
+      },
+      "updated_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "version": {
+        "nullable": false,
+        "type": "INTEGER"
+      }
+    },
+    "foreign_keys": [],
+    "primary_key": [
+      "id"
+    ]
+  },
+  "vbwd_addon_subscription": {
+    "columns": {
+      "addon_id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "cancelled_at": {
+        "nullable": true,
+        "type": "TIMESTAMP"
+      },
+      "created_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "expires_at": {
+        "nullable": true,
+        "type": "TIMESTAMP"
+      },
+      "id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "invoice_id": {
+        "nullable": true,
+        "type": "UUID"
+      },
+      "provider_subscription_id": {
+        "nullable": true,
+        "type": "VARCHAR(255)"
+      },
+      "starts_at": {
+        "nullable": true,
+        "type": "TIMESTAMP"
+      },
+      "status": {
+        "nullable": false,
+        "type": "VARCHAR(9)"
+      },
+      "subscription_id": {
+        "nullable": true,
+        "type": "UUID"
+      },
+      "updated_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "user_id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "version": {
+        "nullable": false,
+        "type": "INTEGER"
+      }
+    },
+    "foreign_keys": [
+      [
+        [
+          "addon_id"
+        ],
+        "vbwd_addon",
+        [
+          "id"
+        ]
+      ],
+      [
+        [
+          "invoice_id"
+        ],
+        "vbwd_user_invoice",
+        [
+          "id"
+        ]
+      ],
+      [
+        [
+          "subscription_id"
+        ],
+        "vbwd_subscription",
+        [
+          "id"
+        ]
+      ],
+      [
+        [
+          "user_id"
+        ],
+        "vbwd_user",
+        [
+          "id"
+        ]
+      ]
+    ],
+    "primary_key": [
+      "id"
+    ]
+  },
+  "vbwd_addon_tarif_plans": {
+    "columns": {
+      "addon_id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "tarif_plan_id": {
+        "nullable": false,
+        "type": "UUID"
+      }
+    },
+    "foreign_keys": [
+      [
+        [
+          "addon_id"
+        ],
+        "vbwd_addon",
+        [
+          "id"
+        ]
+      ],
+      [
+        [
+          "tarif_plan_id"
+        ],
+        "vbwd_tarif_plan",
+        [
+          "id"
+        ]
+      ]
+    ],
+    "primary_key": [
+      "addon_id",
+      "tarif_plan_id"
+    ]
+  },
+  "vbwd_subscription": {
+    "columns": {
+      "cancelled_at": {
+        "nullable": true,
+        "type": "TIMESTAMP"
+      },
+      "created_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "expires_at": {
+        "nullable": true,
+        "type": "TIMESTAMP"
+      },
+      "id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "paused_at": {
+        "nullable": true,
+        "type": "TIMESTAMP"
+      },
+      "payment_failed_at": {
+        "nullable": true,
+        "type": "TIMESTAMP"
+      },
+      "pending_plan_id": {
+        "nullable": true,
+        "type": "UUID"
+      },
+      "provider_subscription_id": {
+        "nullable": true,
+        "type": "VARCHAR(255)"
+      },
+      "started_at": {
+        "nullable": true,
+        "type": "TIMESTAMP"
+      },
+      "status": {
+        "nullable": false,
+        "type": "VARCHAR(9)"
+      },
+      "tarif_plan_id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "trial_end_at": {
+        "nullable": true,
+        "type": "TIMESTAMP"
+      },
+      "updated_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "user_id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "version": {
+        "nullable": false,
+        "type": "INTEGER"
+      }
+    },
+    "foreign_keys": [
+      [
+        [
+          "pending_plan_id"
+        ],
+        "vbwd_tarif_plan",
+        [
+          "id"
+        ]
+      ],
+      [
+        [
+          "tarif_plan_id"
+        ],
+        "vbwd_tarif_plan",
+        [
+          "id"
+        ]
+      ],
+      [
+        [
+          "user_id"
+        ],
+        "vbwd_user",
+        [
+          "id"
+        ]
+      ]
+    ],
+    "primary_key": [
+      "id"
+    ]
+  },
+  "vbwd_tarif_plan": {
+    "columns": {
+      "billing_period": {
+        "nullable": false,
+        "type": "VARCHAR(9)"
+      },
+      "created_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "currency": {
+        "nullable": true,
+        "type": "VARCHAR(3)"
+      },
+      "description": {
+        "nullable": true,
+        "type": "TEXT"
+      },
+      "features": {
+        "nullable": true,
+        "type": "JSON"
+      },
+      "id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "is_active": {
+        "nullable": false,
+        "type": "BOOLEAN"
+      },
+      "name": {
+        "nullable": false,
+        "type": "VARCHAR(100)"
+      },
+      "price": {
+        "nullable": true,
+        "type": "NUMERIC(10, 2)"
+      },
+      "price_float": {
+        "nullable": false,
+        "type": "DOUBLE PRECISION"
+      },
+      "price_id": {
+        "nullable": true,
+        "type": "UUID"
+      },
+      "slug": {
+        "nullable": false,
+        "type": "VARCHAR(100)"
+      },
+      "sort_order": {
+        "nullable": true,
+        "type": "INTEGER"
+      },
+      "trial_days": {
+        "nullable": false,
+        "type": "INTEGER"
+      },
+      "updated_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "version": {
+        "nullable": false,
+        "type": "INTEGER"
+      }
+    },
+    "foreign_keys": [
+      [
+        [
+          "price_id"
+        ],
+        "vbwd_price",
+        [
+          "id"
+        ]
+      ]
+    ],
+    "primary_key": [
+      "id"
+    ]
+  },
+  "vbwd_tarif_plan_category": {
+    "columns": {
+      "created_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "description": {
+        "nullable": true,
+        "type": "TEXT"
+      },
+      "id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "is_single": {
+        "nullable": false,
+        "type": "BOOLEAN"
+      },
+      "name": {
+        "nullable": false,
+        "type": "VARCHAR(100)"
+      },
+      "parent_id": {
+        "nullable": true,
+        "type": "UUID"
+      },
+      "slug": {
+        "nullable": false,
+        "type": "VARCHAR(100)"
+      },
+      "sort_order": {
+        "nullable": false,
+        "type": "INTEGER"
+      },
+      "updated_at": {
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "version": {
+        "nullable": false,
+        "type": "INTEGER"
+      }
+    },
+    "foreign_keys": [
+      [
+        [
+          "parent_id"
+        ],
+        "vbwd_tarif_plan_category",
+        [
+          "id"
+        ]
+      ]
+    ],
+    "primary_key": [
+      "id"
+    ]
+  },
+  "vbwd_tarif_plan_category_plans": {
+    "columns": {
+      "category_id": {
+        "nullable": false,
+        "type": "UUID"
+      },
+      "tarif_plan_id": {
+        "nullable": false,
+        "type": "UUID"
+      }
+    },
+    "foreign_keys": [
+      [
+        [
+          "category_id"
+        ],
+        "vbwd_tarif_plan_category",
+        [
+          "id"
+        ]
+      ],
+      [
+        [
+          "tarif_plan_id"
+        ],
+        "vbwd_tarif_plan",
+        [
+          "id"
+        ]
+      ]
+    ],
+    "primary_key": [
+      "category_id",
+      "tarif_plan_id"
+    ]
+  }
+}

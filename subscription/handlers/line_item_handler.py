@@ -54,6 +54,52 @@ class SubscriptionLineItemHandler(ILineItemHandler):
             return self._restore_addon(line_item, context)
         return LineItemResult.skip()
 
+    def resolve_catalog_item_id(self, line_item):
+        """SUBSCRIPTION → its tarif plan id, ADD_ON → its addon id.
+
+        None for any line item this plugin does not own.
+        """
+        from vbwd.extensions import db
+        from plugins.subscription.subscription.models import (
+            Subscription,
+            AddOnSubscription,
+        )
+
+        if line_item.item_type == LineItemType.SUBSCRIPTION:
+            subscription = db.session.get(Subscription, line_item.item_id)
+            return str(subscription.tarif_plan_id) if subscription else None
+        if line_item.item_type == LineItemType.ADD_ON:
+            addon_subscription = db.session.get(AddOnSubscription, line_item.item_id)
+            return str(addon_subscription.addon_id) if addon_subscription else None
+        return None
+
+    def is_recurring_line_item(self, line_item):
+        """SUBSCRIPTION → plan.is_recurring, ADD_ON → addon.is_recurring.
+
+        False for any line item this plugin does not own.
+        """
+        from vbwd.extensions import db
+        from plugins.subscription.subscription.models import (
+            Subscription,
+            AddOnSubscription,
+        )
+
+        if line_item.item_type == LineItemType.SUBSCRIPTION:
+            subscription = db.session.get(Subscription, line_item.item_id)
+            return bool(
+                subscription
+                and subscription.tarif_plan
+                and subscription.tarif_plan.is_recurring
+            )
+        if line_item.item_type == LineItemType.ADD_ON:
+            addon_subscription = db.session.get(AddOnSubscription, line_item.item_id)
+            return bool(
+                addon_subscription
+                and addon_subscription.addon
+                and addon_subscription.addon.is_recurring
+            )
+        return False
+
     # ── Activation ────────────────────────────────────────────────────────
 
     def _activate_subscription(

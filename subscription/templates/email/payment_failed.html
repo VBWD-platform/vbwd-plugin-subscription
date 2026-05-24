@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Payment Failed</h2>
+<p>Hi {{ first_name }},</p>
+<div class="warning-box">
+    <p><strong>We were unable to process your payment for {{ plan_name }}.</strong></p>
+</div>
+<p>This could be due to:</p>
+<ul>
+    <li>Insufficient funds</li>
+    <li>Expired card</li>
+    <li>Bank decline</li>
+</ul>
+<p>To avoid any interruption to your service, please update your payment method.</p>
+<p><a href="{{ retry_url }}" class="button">Retry Payment</a></p>
+<p>If you need assistance, please don't hesitate to contact our support team.</p>
+{% endblock %}

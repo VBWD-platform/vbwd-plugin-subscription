@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Your subscription is now active!</h2>
+<p>Hi {{ first_name }},</p>
+<p>Great news! Your <strong>{{ plan_name }}</strong> subscription has been activated successfully.</p>
+<div class="info-box">
+    <p><strong>Subscription Details:</strong></p>
+    <ul>
+        <li>Plan: {{ plan_name }}</li>
+        <li>Valid until: {{ expires_at }}</li>
+    </ul>
+</div>
+<p>You now have access to all the features included in your plan.</p>
+<p><a href="https://vbwd.com/dashboard" class="button">Go to Dashboard</a></p>
+<p>Thank you for choosing VBWD!</p>
+{% endblock %}
