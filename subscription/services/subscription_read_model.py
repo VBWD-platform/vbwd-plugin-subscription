@@ -77,9 +77,7 @@ class SubscriptionReadModel(ISubscriptionReadModel):
         )
         enrichment["subscription_is_trial"] = subscription.trial_end_at is not None
         enrichment["subscription_trial_end"] = (
-            subscription.trial_end_at.isoformat()
-            if subscription.trial_end_at
-            else None
+            subscription.trial_end_at.isoformat() if subscription.trial_end_at else None
         )
 
         return enrichment

@@ -31,7 +31,9 @@ def _line_item(item_type):
 def test_ghrm_recurring_plan_subscription_is_recurring(mock_db):
     """ghrm sells recurring tarif plans → SUBSCRIPTION line item → recurring."""
     plan = SimpleNamespace(
-        name="GHRM Backend", is_recurring=True, billing_period=SimpleNamespace(value="MONTHLY")
+        name="GHRM Backend",
+        is_recurring=True,
+        billing_period=SimpleNamespace(value="MONTHLY"),
     )
     mock_db.session.get.return_value = SimpleNamespace(tarif_plan=plan)
     handler = _handler()
@@ -46,7 +48,9 @@ def test_ghrm_recurring_plan_subscription_is_recurring(mock_db):
 @patch("vbwd.extensions.db")
 def test_one_off_plan_subscription_is_not_recurring(mock_db):
     plan = SimpleNamespace(
-        name="Lifetime", is_recurring=False, billing_period=SimpleNamespace(value="ONE_TIME")
+        name="Lifetime",
+        is_recurring=False,
+        billing_period=SimpleNamespace(value="ONE_TIME"),
     )
     mock_db.session.get.return_value = SimpleNamespace(tarif_plan=plan)
     handler = _handler()
@@ -58,7 +62,9 @@ def test_one_off_plan_subscription_is_not_recurring(mock_db):
 
 @patch("vbwd.extensions.db")
 def test_recurring_addon_is_recurring(mock_db):
-    addon = SimpleNamespace(name="Priority Support", is_recurring=True, billing_period="MONTHLY")
+    addon = SimpleNamespace(
+        name="Priority Support", is_recurring=True, billing_period="MONTHLY"
+    )
     mock_db.session.get.return_value = SimpleNamespace(addon=addon)
     handler = _handler()
     item = _line_item(LineItemType.ADD_ON)
@@ -70,7 +76,9 @@ def test_recurring_addon_is_recurring(mock_db):
 
 @patch("vbwd.extensions.db")
 def test_one_time_addon_is_not_recurring(mock_db):
-    addon = SimpleNamespace(name="Setup Fee", is_recurring=False, billing_period="ONE_TIME")
+    addon = SimpleNamespace(
+        name="Setup Fee", is_recurring=False, billing_period="ONE_TIME"
+    )
     mock_db.session.get.return_value = SimpleNamespace(addon=addon)
     handler = _handler()
     item = _line_item(LineItemType.ADD_ON)

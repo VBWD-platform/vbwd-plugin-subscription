@@ -40,6 +40,6 @@ def test_providers_resolve_to_repositories(app, db):
             repo = getattr(container, provider_name)()
             assert repo is not None, f"{provider_name} resolved to None"
             # BaseRepository subclasses expose the session they were built with.
-            assert hasattr(repo, "session") or hasattr(repo, "_session"), (
-                f"{provider_name} did not resolve to a repository instance"
-            )
+            assert hasattr(repo, "session") or hasattr(
+                repo, "_session"
+            ), f"{provider_name} did not resolve to a repository instance"
