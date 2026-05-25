@@ -62,6 +62,12 @@ def app():
         _db.engine.dispose()
 
 
+@pytest.fixture
+def client(app):
+    """Flask test client (for route-level tests relocated from core)."""
+    return app.test_client()
+
+
 def _ensure_subscription_enabled(flask_app) -> None:
     """Enable the subscription plugin (and its ``email`` dependency) so
     ``on_enable()`` runs and registers the DI providers / handlers.

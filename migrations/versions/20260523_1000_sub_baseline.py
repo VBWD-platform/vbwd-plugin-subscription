@@ -17,15 +17,21 @@ the current head; future subscription migrations set their down_revision to
 this id.
 
 Revision ID: 20260523_1000_sub_baseline
-Revises: 20260424_1015
+Revises: 20260406_1800
 Create Date: 2026-05-23
+
+Anchors on a CORE revision (`20260406_1800`), NOT another plugin: subscription
+is a foundational plugin that others (taro, meinchat, …) declare a dependency
+on, so its branch base must sit directly on core. (Previously chained off
+meinchat's `20260424_1015` purely by creation order — a cross-plugin coupling in
+the wrong direction.)
 
 (Revision id kept <= 32 chars for the alembic_version.version_num column.)
 """
 
 # revision identifiers, used by Alembic.
 revision = "20260523_1000_sub_baseline"
-down_revision = "20260424_1015"
+down_revision = "20260406_1800"
 branch_labels = None
 depends_on = None
 
