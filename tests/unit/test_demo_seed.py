@@ -11,14 +11,23 @@ from plugins.subscription.subscription import demo_seed
 
 def test_seed_catalog_adds_all_demo_plans_and_addons():
     session = MagicMock()
+    # No access level exists yet → all plan-linked levels are created too.
+    service = MagicMock()
+    service.find_by_linked_plan_slug.return_value = None
     with patch.object(demo_seed, "DEMO_PLANS", demo_seed.DEMO_PLANS), patch(
         "plugins.subscription.subscription.models.TarifPlan"
-    ), patch("plugins.subscription.subscription.models.AddOn"):
+    ), patch("plugins.subscription.subscription.models.AddOn"), patch(
+        "vbwd.services.user_access_level_service.UserAccessLevelService",
+        return_value=service,
+    ):
         demo_seed.seed_catalog(session)
 
-    assert session.add.call_count == len(demo_seed.DEMO_PLANS) + len(
-        demo_seed.DEMO_ADDONS
+    expected = (
+        len(demo_seed.DEMO_PLANS)
+        + len(demo_seed.DEMO_ADDONS)
+        + len(demo_seed.USER_ACCESS_LEVEL_PLAN_SLUGS)
     )
+    assert session.add.call_count == expected
 
 
 def test_test_plan_uses_marker_and_known_slug():

@@ -50,6 +50,13 @@ DEMO_PLANS = [
     },
 ]
 
+# Plans that get a paired, plan-linked user access level seeded alongside the
+# catalog. Sourced from DEMO_PLANS by slug (DRY — no second copy of the
+# strings); the link is a soft `linked_plan_slug`, resolved on
+# `subscription.activated` by `access_level_handler` via
+# `find_by_linked_plan_slug`.
+USER_ACCESS_LEVEL_PLAN_SLUGS = ["basic", "pro"]
+
 DEMO_ADDONS = [
     {
         "name": "Priority Support",
@@ -111,6 +118,46 @@ def seed_catalog(session) -> None:
                 config=addon_data["config"],
             )
         )
+
+    seed_user_access_levels(session)
+
+
+def seed_user_access_levels(session) -> int:
+    """Idempotently create the plan-linked user access levels (basic + pro).
+
+    One ``vbwd_user_access_level`` row is created per slug in
+    ``USER_ACCESS_LEVEL_PLAN_SLUGS`` (sourced from ``DEMO_PLANS``). Existence
+    is resolved through the core ``UserAccessLevelService`` (no raw SQL); rows
+    are created via the ``UserAccessLevel`` ORM model exactly like core's own
+    access routes. Re-running is a no-op.
+
+    Returns:
+        Number of access levels created on this run.
+    """
+    from uuid import uuid4
+    from vbwd.models.user_access_level import UserAccessLevel
+    from vbwd.services.user_access_level_service import UserAccessLevelService
+
+    plans_by_slug = {plan["slug"]: plan for plan in DEMO_PLANS}
+    service = UserAccessLevelService(session)
+    created_levels = 0
+    for plan_slug in USER_ACCESS_LEVEL_PLAN_SLUGS:
+        if service.find_by_linked_plan_slug(plan_slug):
+            continue
+        plan = plans_by_slug[plan_slug]
+        session.add(
+            UserAccessLevel(
+                id=uuid4(),
+                name=plan["name"],
+                slug=plan_slug,
+                description=f"Access level for the {plan['name']} plan.",
+                is_system=False,
+                linked_plan_slug=plan_slug,
+            )
+        )
+        created_levels += 1
+
+    return created_levels
 
 
 def seed_test_data(session, test_user) -> None:
