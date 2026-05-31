@@ -16,13 +16,13 @@ from pathlib import Path
 from sqlalchemy import inspect as sa_inspect
 
 SUBSCRIPTION_TABLES = [
-    "vbwd_subscription",
-    "vbwd_tarif_plan",
-    "vbwd_addon",
-    "vbwd_addon_subscription",
-    "vbwd_tarif_plan_category",
-    "vbwd_addon_tarif_plans",
-    "vbwd_tarif_plan_category_plans",
+    "subscription_record",
+    "subscription_tarif_plan",
+    "subscription_addon",
+    "subscription_addon_subscription",
+    "subscription_tarif_plan_category",
+    "subscription_addon_tarif_plans",
+    "subscription_tarif_plan_category_plans",
 ]
 
 SNAPSHOT = Path(__file__).parent / "_schema_fingerprint.json"

@@ -1,5 +1,5 @@
 {
-  "vbwd_addon": {
+  "subscription_addon": {
     "columns": {
       "billing_period": {
         "nullable": false,
@@ -59,7 +59,7 @@
       "id"
     ]
   },
-  "vbwd_addon_subscription": {
+  "subscription_addon_subscription": {
     "columns": {
       "addon_id": {
         "nullable": false,
@@ -119,7 +119,7 @@
         [
           "addon_id"
         ],
-        "vbwd_addon",
+        "subscription_addon",
         [
           "id"
         ]
@@ -137,7 +137,7 @@
         [
           "subscription_id"
         ],
-        "vbwd_subscription",
+        "subscription_record",
         [
           "id"
         ]
@@ -156,7 +156,7 @@
       "id"
     ]
   },
-  "vbwd_addon_tarif_plans": {
+  "subscription_addon_tarif_plans": {
     "columns": {
       "addon_id": {
         "nullable": false,
@@ -172,7 +172,7 @@
         [
           "addon_id"
         ],
-        "vbwd_addon",
+        "subscription_addon",
         [
           "id"
         ]
@@ -181,7 +181,7 @@
         [
           "tarif_plan_id"
         ],
-        "vbwd_tarif_plan",
+        "subscription_tarif_plan",
         [
           "id"
         ]
@@ -192,7 +192,7 @@
       "tarif_plan_id"
     ]
   },
-  "vbwd_subscription": {
+  "subscription_record": {
     "columns": {
       "cancelled_at": {
         "nullable": true,
@@ -260,7 +260,7 @@
         [
           "pending_plan_id"
         ],
-        "vbwd_tarif_plan",
+        "subscription_tarif_plan",
         [
           "id"
         ]
@@ -269,7 +269,7 @@
         [
           "tarif_plan_id"
         ],
-        "vbwd_tarif_plan",
+        "subscription_tarif_plan",
         [
           "id"
         ]
@@ -288,7 +288,7 @@
       "id"
     ]
   },
-  "vbwd_tarif_plan": {
+  "subscription_tarif_plan": {
     "columns": {
       "billing_period": {
         "nullable": false,
@@ -370,7 +370,7 @@
       "id"
     ]
   },
-  "vbwd_tarif_plan_category": {
+  "subscription_tarif_plan_category": {
     "columns": {
       "created_at": {
         "nullable": false,
@@ -418,7 +418,7 @@
         [
           "parent_id"
         ],
-        "vbwd_tarif_plan_category",
+        "subscription_tarif_plan_category",
         [
           "id"
         ]
@@ -428,7 +428,7 @@
       "id"
     ]
   },
-  "vbwd_tarif_plan_category_plans": {
+  "subscription_tarif_plan_category_plans": {
     "columns": {
       "category_id": {
         "nullable": false,
@@ -444,7 +444,7 @@
         [
           "category_id"
         ],
-        "vbwd_tarif_plan_category",
+        "subscription_tarif_plan_category",
         [
           "id"
         ]
@@ -453,7 +453,7 @@
         [
           "tarif_plan_id"
         ],
-        "vbwd_tarif_plan",
+        "subscription_tarif_plan",
         [
           "id"
         ]
