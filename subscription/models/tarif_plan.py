@@ -12,7 +12,7 @@ class TarifPlan(BaseModel):
     Defines subscription plans with pricing and features.
     """
 
-    __tablename__ = "vbwd_tarif_plan"
+    __tablename__ = "subscription_tarif_plan"
 
     name = db.Column(db.String(100), nullable=False)
     slug = db.Column(

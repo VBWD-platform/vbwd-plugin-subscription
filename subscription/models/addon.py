@@ -6,17 +6,17 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 # Many-to-many junction table: addon <-> tarif_plan
 addon_tarif_plans = db.Table(
-    "vbwd_addon_tarif_plans",
+    "subscription_addon_tarif_plans",
     db.Column(
         "addon_id",
         db.UUID,
-        db.ForeignKey("vbwd_addon.id", ondelete="CASCADE"),
+        db.ForeignKey("subscription_addon.id", ondelete="CASCADE"),
         primary_key=True,
     ),
     db.Column(
         "tarif_plan_id",
         db.UUID,
-        db.ForeignKey("vbwd_tarif_plan.id", ondelete="CASCADE"),
+        db.ForeignKey("subscription_tarif_plan.id", ondelete="CASCADE"),
         primary_key=True,
     ),
 )
@@ -34,7 +34,7 @@ class AddOn(BaseModel):
     - tarif_plans=[plan_A, plan_B] → only visible to subscribers of those plans
     """
 
-    __tablename__ = "vbwd_addon"
+    __tablename__ = "subscription_addon"
 
     # Basic info
     name = db.Column(db.String(255), nullable=False)

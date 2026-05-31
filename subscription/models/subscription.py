@@ -14,7 +14,7 @@ class Subscription(BaseModel):
     Tracks subscription lifecycle from creation through expiration.
     """
 
-    __tablename__ = "vbwd_subscription"
+    __tablename__ = "subscription_record"
 
     user_id = db.Column(
         UUID(as_uuid=True),
@@ -24,12 +24,12 @@ class Subscription(BaseModel):
     )
     tarif_plan_id = db.Column(
         UUID(as_uuid=True),
-        db.ForeignKey("vbwd_tarif_plan.id"),
+        db.ForeignKey("subscription_tarif_plan.id"),
         nullable=False,
     )
     pending_plan_id = db.Column(
         UUID(as_uuid=True),
-        db.ForeignKey("vbwd_tarif_plan.id"),
+        db.ForeignKey("subscription_tarif_plan.id"),
         nullable=True,
     )
     status = db.Column(

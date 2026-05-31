@@ -10,17 +10,17 @@ if TYPE_CHECKING:
 
 # Many-to-many junction table: category <-> tarif_plan
 tarif_plan_category_plans = db.Table(
-    "vbwd_tarif_plan_category_plans",
+    "subscription_tarif_plan_category_plans",
     db.Column(
         "category_id",
         db.UUID,
-        db.ForeignKey("vbwd_tarif_plan_category.id", ondelete="CASCADE"),
+        db.ForeignKey("subscription_tarif_plan_category.id", ondelete="CASCADE"),
         primary_key=True,
     ),
     db.Column(
         "tarif_plan_id",
         db.UUID,
-        db.ForeignKey("vbwd_tarif_plan.id", ondelete="CASCADE"),
+        db.ForeignKey("subscription_tarif_plan.id", ondelete="CASCADE"),
         primary_key=True,
     ),
 )
@@ -35,14 +35,14 @@ class TarifPlanCategory(BaseModel):
     active subscriptions within this category.
     """
 
-    __tablename__ = "vbwd_tarif_plan_category"
+    __tablename__ = "subscription_tarif_plan_category"
 
     name = db.Column(db.String(100), nullable=False)
     slug = db.Column(db.String(100), unique=True, nullable=False, index=True)
     description = db.Column(db.Text, nullable=True)
     parent_id = db.Column(
         db.UUID,
-        db.ForeignKey("vbwd_tarif_plan_category.id", ondelete="SET NULL"),
+        db.ForeignKey("subscription_tarif_plan_category.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
