@@ -205,6 +205,42 @@ class CheckoutHandler(IEventHandler):
                 )
                 total_amount += addon.price
 
+            # 4a. Apply a coupon discount via the generic core seam. The
+            #     discount plugin registers the adjustment; core/subscription
+            #     name no discount domain. Empty registry / no code → no-op.
+            from vbwd.services.checkout_price_adjustment_registry import (
+                resolve_price_adjustment,
+            )
+
+            price_result = resolve_price_adjustment(
+                code=event.coupon_code,
+                subtotal=total_amount,
+                user_id=str(event.user_id) if event.user_id else None,
+                scope="SUBSCRIPTION",
+                currency=event.currency,
+            )
+            if not price_result.valid:
+                return EventResult.error_result(
+                    price_result.error or "Coupon is not valid"
+                )
+            if price_result.discount_amount > Decimal("0.00"):
+                # Negative line keeps sum(line_items) == total_amount (audit-
+                # friendly, no schema change). CUSTOM-typed, flagged in metadata.
+                line_items_data.append(
+                    {
+                        "type": LineItemType.CUSTOM.value,
+                        "item_id": uuid4(),
+                        "description": price_result.label or "Discount",
+                        "unit_price": -price_result.discount_amount,
+                        "total_price": -price_result.discount_amount,
+                        "extra_data": {
+                            "discount": True,
+                            "coupon_code": event.coupon_code,
+                        },
+                    }
+                )
+                total_amount -= price_result.discount_amount
+
             # 4. Create invoice with all line items. The subscription/plan link
             #    is carried by the SUBSCRIPTION line item below, not a column.
             invoice = UserInvoice(
@@ -231,8 +267,14 @@ class CheckoutHandler(IEventHandler):
                     quantity=1,
                     unit_price=item_data["unit_price"],
                     total_price=item_data["total_price"],
+                    extra_data=item_data.get("extra_data"),
                 )
                 repos["invoice_line_item"].create(line_item)
+
+            # 5a. Redeem the coupon + record the application, now the invoice
+            #     exists. Runs exactly once; no-op when no coupon was applied.
+            if price_result.on_committed:
+                price_result.on_committed(str(invoice.id), str(event.user_id))
 
             # 6. Update purchases and addon subscriptions with invoice_id
             for purchase in bundle_purchases:

@@ -88,6 +88,7 @@ def checkout():
     # Get currency and payment method
     currency = data.get("currency", "USD")
     payment_method_code = data.get("payment_method_code")
+    coupon_code = data.get("coupon_code")
 
     # Create checkout event
     event = CheckoutRequestedEvent(
@@ -97,6 +98,7 @@ def checkout():
         add_on_ids=add_on_ids,
         currency=currency,
         payment_method_code=payment_method_code,
+        coupon_code=coupon_code,
     )
 
     # Dispatch event
