@@ -18,7 +18,13 @@ from vbwd.models.user import User
 
 @pytest.fixture
 def discount_ready(db):
-    """Create discount tables + register the discount checkout adjustment."""
+    """Create discount tables + register the discount checkout adjustment.
+
+    The discount plugin is an optional collaborator of subscription checkout, so
+    this cross-plugin test runs only when it is installed (full local suite);
+    in isolated plugin CI it is absent, so skip rather than error.
+    """
+    pytest.importorskip("plugins.discount.discount.models")
     import plugins.discount.discount.models  # noqa: F401
 
     db.create_all()
