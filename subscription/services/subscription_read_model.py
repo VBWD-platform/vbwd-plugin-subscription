@@ -82,6 +82,21 @@ class SubscriptionReadModel(ISubscriptionReadModel):
 
         return enrichment
 
+    def active_plan_ids(self, user_id: UUID) -> List[UUID]:
+        """Return the distinct tariff-plan ids the user is actively entitled to.
+
+        Active means a subscription in ACTIVE or TRIALING status. The plan id is
+        the subscription's ``tarif_plan_id`` FK. Deduped, order-insensitive.
+        Data access stays in the repository (DRY).
+        """
+        active_subscriptions = self._subscription_repo().find_active_by_user_list(
+            user_id
+        )
+        unique_plan_ids = {
+            subscription.tarif_plan_id for subscription in active_subscriptions
+        }
+        return list(unique_plan_ids)
+
     def count_user_subscriptions(self, user_id: UUID) -> int:
         return len(self._subscription_repo().find_by_user(user_id))
 

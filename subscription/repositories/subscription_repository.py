@@ -39,6 +39,26 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             .first()
         )
 
+    def find_active_by_user_list(self, user_id: Union[UUID, str]) -> List[Subscription]:
+        """Find all active or trialing subscriptions for a user.
+
+        List counterpart of ``find_active_by_user`` (which returns a single
+        Optional). Uses the same ACTIVE/TRIALING predicate.
+        """
+        return (
+            self._session.query(Subscription)
+            .filter(
+                Subscription.user_id == user_id,
+                Subscription.status.in_(
+                    [
+                        SubscriptionStatus.ACTIVE,
+                        SubscriptionStatus.TRIALING,
+                    ]
+                ),
+            )
+            .all()
+        )
+
     def find_by_provider_subscription_id(
         self, provider_subscription_id: str
     ) -> Optional[Subscription]:
