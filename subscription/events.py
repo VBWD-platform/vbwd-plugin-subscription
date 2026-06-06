@@ -79,6 +79,7 @@ class SubscriptionCancelledEvent(DomainEvent):
     plan_name: Optional[str] = None
     user_email: Optional[str] = None
     first_name: Optional[str] = None
+    provider: Optional[str] = None
 
     def __post_init__(self):
         """Set event name and timestamp."""
@@ -168,6 +169,10 @@ class CheckoutRequestedEvent(DomainEvent):
     add_on_ids: List[UUID] = field(default_factory=list)
     currency: str = "USD"
     payment_method_code: Optional[str] = None
+    # Generic coupon code (like payment_method_code, names no discount domain) —
+    # the checkout handler reduces the price via the core
+    # checkout_price_adjustment_registry; empty/None when no coupon.
+    coupon_code: Optional[str] = None
 
     def __post_init__(self):
         self.name = "checkout.requested"

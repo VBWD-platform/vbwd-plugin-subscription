@@ -1,17 +1,20 @@
-"""Subscription read model — implements the core read port.
+"""Subscription read model — plugin-internal read projections.
 
 Relocated verbatim (E2) from the inline subscription reads previously in
 core `vbwd/routes/admin/invoices.py` and `vbwd/routes/admin/users.py`.
-Same output shape; now plugin-owned so core carries no subscription repo.
+Same output shape; plugin-owned so core carries no subscription repo.
+
+S50.3: this is no longer bound to a core port. ``enrich_invoice`` is now
+consumed through the generic ``invoice_extra_fields_registry``; the add-ons
+read backs the subscription plugin's own admin endpoint; ``active_plan_ids``
+stays plugin-internal (S49/GHRM).
 """
 from typing import Any, Dict, List
 from uuid import UUID
 
-from vbwd.services.subscription_read_model import ISubscriptionReadModel
 
-
-class SubscriptionReadModel(ISubscriptionReadModel):
-    """Read-only subscription projections for core admin surfaces."""
+class SubscriptionReadModel:
+    """Read-only subscription projections for admin surfaces (plugin-internal)."""
 
     def _session(self):
         from vbwd.extensions import db

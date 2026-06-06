@@ -398,7 +398,7 @@ class SubscriptionService:
         Returns:
             List of dicts with subscription_id and days_overdue
         """
-        from vbwd.events.subscription_events import SubscriptionDunningEvent
+        from plugins.subscription.subscription.events import SubscriptionDunningEvent
 
         results = []
         for days in self.DUNNING_DAYS:

@@ -12,6 +12,37 @@ DEFAULT_CONFIG = {
 }
 
 
+# Frontend event types this plugin contributes to the core security whitelist
+# (POST /api/v1/events). Core owns only generic platform types; the subscription
+# domain types live here so core names no plugin domain.
+SUBSCRIPTION_FRONTEND_EVENT_TYPES = {
+    "subscription:created",
+    "subscription:activated",
+    "subscription:upgraded",
+    "subscription:downgraded",
+    "subscription:cancelled",
+    "subscription:expired",
+}
+
+
+def register_subscription_frontend_event_types() -> None:
+    """Add the subscription frontend event types to the core whitelist."""
+    from vbwd.services.frontend_event_type_registry import (
+        register_frontend_event_types,
+    )
+
+    register_frontend_event_types(SUBSCRIPTION_FRONTEND_EVENT_TYPES)
+
+
+def unregister_subscription_frontend_event_types() -> None:
+    """Remove the subscription frontend event types (plugin disable)."""
+    from vbwd.services.frontend_event_type_registry import (
+        unregister_frontend_event_types,
+    )
+
+    unregister_frontend_event_types(SUBSCRIPTION_FRONTEND_EVENT_TYPES)
+
+
 class SubscriptionPlugin(BasePlugin):
     @property
     def metadata(self) -> PluginMetadata:
@@ -193,15 +224,18 @@ class SubscriptionPlugin(BasePlugin):
         register_entitlement_provider(SubscriptionEntitlementProvider())
         logger.info("[subscription] Entitlement provider registered")
 
-        from vbwd.services.subscription_read_model import (
-            register_subscription_read_model,
+        from vbwd.services.invoice_extra_fields_registry import (
+            register_invoice_extra_fields_provider,
         )
         from plugins.subscription.subscription.services.subscription_read_model import (  # noqa: E501
             SubscriptionReadModel,
         )
 
-        register_subscription_read_model(SubscriptionReadModel())
-        logger.info("[subscription] Subscription read model registered")
+        register_invoice_extra_fields_provider(
+            "subscription",
+            lambda invoice: SubscriptionReadModel().enrich_invoice(invoice),
+        )
+        logger.info("[subscription] Invoice extra-fields provider registered")
 
         from vbwd.services.deletion_dependency_registry import (
             register_deletion_dependency_provider,
@@ -222,23 +256,8 @@ class SubscriptionPlugin(BasePlugin):
         )
         logger.info("[subscription] Deletion-dependency provider registered")
 
-        from vbwd.services.catalog_read_model import register_catalog_read_model
-        from plugins.subscription.subscription.services.catalog_read_model import (
-            CatalogReadModel,
-        )
-
-        register_catalog_read_model(CatalogReadModel())
-        logger.info("[subscription] Catalog read model registered")
-
-        from vbwd.services.subscription_lifecycle import (
-            register_subscription_lifecycle,
-        )
-        from plugins.subscription.subscription.services.subscription_lifecycle import (
-            SubscriptionLifecycle,
-        )
-
-        register_subscription_lifecycle(SubscriptionLifecycle())
-        logger.info("[subscription] Subscription lifecycle registered")
+        register_subscription_frontend_event_types()
+        logger.info("[subscription] Frontend event types registered")
 
         from vbwd.services.demo_data_registry import (
             register_catalog_seeder,
@@ -300,12 +319,8 @@ class SubscriptionPlugin(BasePlugin):
 
     def on_disable(self):
         from vbwd.services.entitlement import clear_entitlement_provider
-        from vbwd.services.subscription_read_model import (
-            clear_subscription_read_model,
-        )
-        from vbwd.services.catalog_read_model import clear_catalog_read_model
-        from vbwd.services.subscription_lifecycle import (
-            clear_subscription_lifecycle,
+        from vbwd.services.invoice_extra_fields_registry import (
+            unregister_invoice_extra_fields_provider,
         )
         from vbwd.services.demo_data_registry import clear_demo_data_hooks
         from vbwd.services.deletion_dependency_registry import (
@@ -313,16 +328,32 @@ class SubscriptionPlugin(BasePlugin):
         )
 
         clear_entitlement_provider()
-        clear_subscription_read_model()
-        clear_catalog_read_model()
-        clear_subscription_lifecycle()
+        unregister_invoice_extra_fields_provider("subscription")
         clear_demo_data_hooks()
         unregister_deletion_dependency_provider("subscription")
+        unregister_subscription_frontend_event_types()
 
     def register_event_handlers(self, event_bus):
         import logging
 
         logger = logging.getLogger(__name__)
+
+        # S50.4 — subscribe to the domain-neutral recurring-billing facts that
+        # payment plugins publish (link/renew/cancel/fail). Replaces the former
+        # core ISubscriptionLifecycle port; payment plugins stay subscription-free
+        # (no subscriber ⇒ published fact is a no-op).
+        try:
+            from plugins.subscription.subscription.handlers.recurring_billing_subscriber import (  # noqa: E501
+                RecurringBillingSubscriber,
+            )
+
+            RecurringBillingSubscriber().subscribe(event_bus)
+            logger.info("[subscription] Recurring-billing subscribers registered")
+        except Exception as error:
+            logger.warning(
+                "[subscription] Failed to register recurring-billing subscribers: %s",
+                error,
+            )
 
         try:
             from plugins.subscription.subscription.handlers.subscription_handlers import (

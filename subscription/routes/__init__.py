@@ -18,4 +18,5 @@ from plugins.subscription.subscription.routes import (  # noqa: F401, E402
     admin_plans,
     admin_addons,
     admin_categories,
+    admin_user_addons,
 )

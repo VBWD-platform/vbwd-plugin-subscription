@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from vbwd.events.domain import IEventHandler, DomainEvent, EventResult
-from vbwd.events.subscription_events import (
+from plugins.subscription.subscription.events import (
     SubscriptionActivatedEvent,
     SubscriptionCancelledEvent,
     PaymentCompletedEvent,

@@ -9,8 +9,9 @@ from uuid import UUID
 from flask import request, jsonify, g, current_app
 
 from vbwd.middleware.auth import require_auth
-from vbwd.events.checkout_events import CheckoutRequestedEvent
 from vbwd.extensions import db
+
+from plugins.subscription.subscription.events import CheckoutRequestedEvent
 
 from plugins.subscription.subscription.routes import subscription_bp
 

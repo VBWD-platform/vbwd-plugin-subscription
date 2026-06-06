@@ -1,7 +1,7 @@
 """Subscription cancellation event handler."""
 from vbwd.utils.datetime_utils import utcnow
 from vbwd.events.domain import DomainEvent, EventResult, IEventHandler
-from vbwd.events.payment_events import SubscriptionCancelledEvent
+from plugins.subscription.subscription.events import SubscriptionCancelledEvent
 from vbwd.models.enums import SubscriptionStatus
 
 

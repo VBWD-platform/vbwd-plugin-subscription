@@ -1,15 +1,14 @@
-"""Catalog read model — implements the core ICatalogReadModel port.
+"""Catalog read model — subscription-owned plan/category read projections.
 
-Lets catalog consumers (e.g. ghrm) read plan/category data without importing
-the subscription models. Behaviour mirrors the prior direct queries (E2).
+Lets catalog consumers (e.g. ghrm, which declares ``dependencies=["subscription"]``)
+read plan/category data without importing the subscription models. Consumed
+directly by those plugins; core names no catalog vocabulary (S50.1).
 """
 from typing import Dict, List
 from uuid import UUID
 
-from vbwd.services.catalog_read_model import ICatalogReadModel
 
-
-class CatalogReadModel(ICatalogReadModel):
+class CatalogReadModel:
     """Read-only plan-catalog projections for catalog consumers."""
 
     def _session(self):

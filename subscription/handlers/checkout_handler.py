@@ -3,7 +3,7 @@ from typing import List, Dict, Any, cast
 from uuid import uuid4, UUID
 from decimal import Decimal
 from vbwd.events.domain import IEventHandler, DomainEvent, EventResult
-from vbwd.events.checkout_events import CheckoutRequestedEvent
+from plugins.subscription.subscription.events import CheckoutRequestedEvent
 from vbwd.models.enums import (
     SubscriptionStatus,
     PurchaseStatus,
