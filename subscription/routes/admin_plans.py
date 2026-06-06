@@ -345,7 +345,7 @@ def admin_copy_plan(plan_id):
     if not source_plan:
         return jsonify({"error": "Plan not found"}), 404
 
-    # Create a copy with "(copy)" appended to the name
+    # Create a copy with "(Copy)" appended to the name
     # Generate a unique slug for the copy
     base_slug = source_plan.slug or re.sub(
         r"[^a-z0-9]+", "-", source_plan.name.lower()
@@ -353,7 +353,7 @@ def admin_copy_plan(plan_id):
     new_slug = f"{base_slug}-copy-{utcnow().strftime('%Y%m%d%H%M%S')}"
 
     new_plan = TarifPlan(
-        name=f"{source_plan.name} (copy)",
+        name=f"{source_plan.name} (Copy)",
         slug=new_slug,
         description=source_plan.description,
         price=source_plan.price,
