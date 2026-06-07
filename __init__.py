@@ -143,6 +143,30 @@ class SubscriptionPlugin(BasePlugin):
             },
         ]
 
+    def _register_data_exchangers(self) -> None:
+        """Register the subscription entity exchangers into the data-exchange seam.
+
+        Core declares none of these (it stays agnostic); the plugin adds them on
+        enable through the shared ``db.session`` so subscription plans, add-ons
+        and (export-only) subscription records appear on the generic Settings →
+        Import/Export page. Clear-safe: re-registering replaces by key (per-test
+        app re-enable).
+        """
+        import logging
+
+        try:
+            from vbwd.extensions import db
+            from plugins.subscription.subscription.services.data_exchange.subscription_exchangers import (  # noqa: E501
+                register_subscription_exchangers,
+            )
+
+            register_subscription_exchangers(db.session)
+        except Exception as exchanger_error:
+            logging.getLogger(__name__).warning(
+                "[subscription] Failed to register data exchangers: %s",
+                exchanger_error,
+            )
+
     def on_enable(self):
         import logging
 
@@ -258,6 +282,8 @@ class SubscriptionPlugin(BasePlugin):
 
         register_subscription_frontend_event_types()
         logger.info("[subscription] Frontend event types registered")
+
+        self._register_data_exchangers()
 
         from vbwd.services.demo_data_registry import (
             register_catalog_seeder,
