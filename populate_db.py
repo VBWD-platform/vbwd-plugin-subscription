@@ -172,3 +172,11 @@ def _populate_email_templates():
             logger.info("[subscription] Created email template: %s", tpl["event_type"])
 
     db.session.commit()
+
+
+if __name__ == "__main__":
+    from vbwd.app import create_app
+
+    app = create_app()
+    with app.app_context():
+        populate()
