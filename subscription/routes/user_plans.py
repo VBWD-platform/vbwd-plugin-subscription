@@ -15,6 +15,12 @@ from plugins.subscription.subscription.services.tarif_plan_service import (
 )
 from vbwd.services.currency_service import CurrencyService
 from vbwd.services.tax_service import TaxService
+from vbwd.services.cache import cached_response, resolve_cache_store
+from plugins.subscription.subscription.cache_keys import (
+    catalog_cache_ttl_seconds,
+    plan_detail_cache_key,
+    plan_list_cache_key,
+)
 from plugins.subscription.subscription.routes import subscription_bp
 
 
@@ -37,63 +43,73 @@ def list_plans():
     country_code = request.args.get("country", "").upper() or None
     category_slug = request.args.get("category")
 
-    # Initialize services
-    plan_repo = TarifPlanRepository(db.session)
-    currency_repo = CurrencyRepository(db.session)  # type: ignore[arg-type]
-    tax_repo = TaxRepository(db.session)  # type: ignore[arg-type]
+    def produce_plan_list():
+        # Initialize services
+        plan_repo = TarifPlanRepository(db.session)
+        currency_repo = CurrencyRepository(db.session)  # type: ignore[arg-type]
+        tax_repo = TaxRepository(db.session)  # type: ignore[arg-type]
 
-    currency_service = CurrencyService(currency_repo=currency_repo)
-    tax_service = TaxService(tax_repo=tax_repo)
-    tarif_plan_service = TarifPlanService(
-        tarif_plan_repo=plan_repo,
-        currency_service=currency_service,
-        tax_service=tax_service,
-    )
+        currency_service = CurrencyService(currency_repo=currency_repo)
+        tax_service = TaxService(tax_repo=tax_repo)
+        tarif_plan_service = TarifPlanService(
+            tarif_plan_repo=plan_repo,
+            currency_service=currency_service,
+            tax_service=tax_service,
+        )
 
-    # Get active plans, optionally filtered by category
-    if category_slug:
-        category_repo = TarifPlanCategoryRepository(db.session)
-        category = category_repo.find_by_slug(category_slug)
-        if not category:
-            return jsonify({"error": f"Category '{category_slug}' not found"}), 404
-        plans = [p for p in category.tarif_plans if p.is_active]
-    else:
-        plans = tarif_plan_service.get_active_plans()
+        # Get active plans, optionally filtered by category
+        if category_slug:
+            category_repo = TarifPlanCategoryRepository(db.session)
+            category = category_repo.find_by_slug(category_slug)
+            if not category:
+                return {"error": f"Category '{category_slug}' not found"}, 404
+            plans = [p for p in category.tarif_plans if p.is_active]
+        else:
+            plans = tarif_plan_service.get_active_plans()
 
-    # Add pricing info to each plan
-    result = []
-    for plan in plans:
-        try:
-            plan_data = tarif_plan_service.get_plan_with_pricing(
-                plan,
-                currency_code=currency_code,
-                country_code=country_code,
-            )
-            result.append(plan_data)
-        except ValueError as e:
-            # Currency not found - use default
-            plan_data = {
-                "id": str(plan.id),
-                "name": plan.name,
-                "slug": plan.slug,
-                "description": plan.description,
-                "price": plan.price_float,
-                "billing_period": plan.billing_period.value,
-                "is_active": plan.is_active,
-                "error": str(e),
-            }
-            result.append(plan_data)
+        # Add pricing info to each plan
+        result = []
+        for plan in plans:
+            try:
+                plan_data = tarif_plan_service.get_plan_with_pricing(
+                    plan,
+                    currency_code=currency_code,
+                    country_code=country_code,
+                )
+                result.append(plan_data)
+            except ValueError as e:
+                # Currency not found - use default
+                plan_data = {
+                    "id": str(plan.id),
+                    "name": plan.name,
+                    "slug": plan.slug,
+                    "description": plan.description,
+                    "price": plan.price_float,
+                    "billing_period": plan.billing_period.value,
+                    "is_active": plan.is_active,
+                    "error": str(e),
+                }
+                result.append(plan_data)
 
-    return (
-        jsonify(
+        return (
             {
                 "plans": result,
                 "currency": currency_code,
                 "country": country_code,
-            }
-        ),
-        200,
+            },
+            200,
+        )
+
+    # Cache the resolved public list per (currency, country, category); only
+    # 2xx bodies are cached. Admin plan writes clear the ``tarif-plans:`` prefix.
+    cache_key = plan_list_cache_key(currency_code, country_code, category_slug)
+    body, status = cached_response(
+        resolve_cache_store(),
+        cache_key,
+        catalog_cache_ttl_seconds(),
+        produce_plan_list,
     )
+    return jsonify(body), status
 
 
 @subscription_bp.route("/api/v1/tarif-plans/<slug_or_id>", methods=["GET"])
@@ -118,52 +134,55 @@ def get_plan(slug_or_id: str):
     currency_code = request.args.get("currency", "EUR").upper()
     country_code = request.args.get("country", "").upper() or None
 
-    # Initialize services
-    plan_repo = TarifPlanRepository(db.session)
-    currency_repo = CurrencyRepository(db.session)  # type: ignore[arg-type]
-    tax_repo = TaxRepository(db.session)  # type: ignore[arg-type]
+    def produce_plan_detail():
+        # Initialize services
+        plan_repo = TarifPlanRepository(db.session)
+        currency_repo = CurrencyRepository(db.session)  # type: ignore[arg-type]
+        tax_repo = TaxRepository(db.session)  # type: ignore[arg-type]
 
-    currency_service = CurrencyService(currency_repo=currency_repo)
-    tax_service = TaxService(tax_repo=tax_repo)
-    tarif_plan_service = TarifPlanService(
-        tarif_plan_repo=plan_repo,
-        currency_service=currency_service,
-        tax_service=tax_service,
-    )
+        currency_service = CurrencyService(currency_repo=currency_repo)
+        tax_service = TaxService(tax_repo=tax_repo)
+        tarif_plan_service = TarifPlanService(
+            tarif_plan_repo=plan_repo,
+            currency_service=currency_service,
+            tax_service=tax_service,
+        )
 
-    # Get plan by UUID or slug
-    plan = None
-    try:
-        uuid.UUID(slug_or_id)
-        plan = plan_repo.find_by_id(slug_or_id)
-    except ValueError:
-        plan = tarif_plan_service.get_plan_by_slug(slug_or_id)
+        # Get plan by UUID or slug
+        plan = None
+        try:
+            uuid.UUID(slug_or_id)
+            plan = plan_repo.find_by_id(slug_or_id)
+        except ValueError:
+            plan = tarif_plan_service.get_plan_by_slug(slug_or_id)
 
-    if not plan:
-        return jsonify({"error": "Plan not found"}), 404
+        if not plan:
+            return {"error": "Plan not found"}, 404
 
-    # Add pricing info, merge with full plan data
-    try:
+        # Add pricing info, merge with full plan data. When pricing resolution
+        # fails (e.g. the requested currency / FX rate is not seeded) we degrade
+        # gracefully to 200 with the base price — exactly like ``list_plans`` —
+        # so a missing rate never 400s a valid plan lookup. The plan was already
+        # resolved above, so this is never a "not found" case.
         plan_data = plan.to_dict()
-        pricing = tarif_plan_service.get_plan_with_pricing(
-            plan,
-            currency_code=currency_code,
-            country_code=country_code,
-        )
-        plan_data.update(pricing)
-        return jsonify(plan_data), 200
-    except ValueError as e:
-        return (
-            jsonify(
-                {
-                    "error": str(e),
-                    "plan": {
-                        "id": str(plan.id),
-                        "name": plan.name,
-                        "slug": plan.slug,
-                        "price": plan.price_float,
-                    },
-                }
-            ),
-            400,
-        )
+        try:
+            pricing = tarif_plan_service.get_plan_with_pricing(
+                plan,
+                currency_code=currency_code,
+                country_code=country_code,
+            )
+            plan_data.update(pricing)
+        except ValueError as pricing_error:
+            plan_data["pricing_error"] = str(pricing_error)
+        return plan_data, 200
+
+    # Cache 2xx only, keyed by (slug-or-id, currency, country). A 404 is never
+    # cached; admin plan writes clear the ``tarif-plans:`` prefix.
+    cache_key = plan_detail_cache_key(slug_or_id, currency_code, country_code)
+    body, status = cached_response(
+        resolve_cache_store(),
+        cache_key,
+        catalog_cache_ttl_seconds(),
+        produce_plan_detail,
+    )
+    return jsonify(body), status

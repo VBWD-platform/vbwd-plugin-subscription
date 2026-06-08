@@ -9,6 +9,7 @@ from plugins.subscription.subscription.repositories.addon_repository import (
 from vbwd.extensions import db
 from plugins.subscription.subscription.models import AddOn
 from plugins.subscription.subscription.models import TarifPlan
+from plugins.subscription.subscription.cache_keys import invalidate_addon_cache
 from plugins.subscription.subscription.routes import subscription_bp
 
 
@@ -142,6 +143,7 @@ def admin_create_addon():
         addon.tarif_plans = tarif_plans
 
         saved_addon = addon_repo.save(addon)
+        invalidate_addon_cache()
 
         return (
             jsonify(
@@ -295,6 +297,7 @@ def admin_update_addon(addon_id):
             addon.tarif_plans = []
 
     saved_addon = addon_repo.save(addon)
+    invalidate_addon_cache()
 
     return jsonify({"addon": saved_addon.to_dict()}), 200
 
@@ -321,6 +324,7 @@ def admin_delete_addon(addon_id):
         return jsonify({"error": "Add-on not found"}), 404
 
     addon_repo.delete(addon_id)
+    invalidate_addon_cache()
 
     return jsonify({"message": "Add-on deleted successfully"}), 200
 
@@ -348,6 +352,7 @@ def admin_activate_addon(addon_id):
 
     addon.is_active = True
     saved_addon = addon_repo.save(addon)
+    invalidate_addon_cache()
 
     return jsonify({"addon": saved_addon.to_dict(), "message": "Add-on activated"}), 200
 
@@ -375,6 +380,7 @@ def admin_deactivate_addon(addon_id):
 
     addon.is_active = False
     saved_addon = addon_repo.save(addon)
+    invalidate_addon_cache()
 
     return (
         jsonify({"addon": saved_addon.to_dict(), "message": "Add-on deactivated"}),

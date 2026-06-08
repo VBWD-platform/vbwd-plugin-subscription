@@ -267,15 +267,22 @@ def admin_list_subscriptions():
         limit=limit, offset=offset, status=status, user_id=user_id, plan_id=plan_id
     )
 
+    # Batch-fetch the users and plans for this page in one query each, then map
+    # by id during enrichment. Avoids the per-row find_by_id N+1 (S48.3).
+    user_ids = {sub.user_id for sub in subscriptions}
+    plan_ids = {sub.tarif_plan_id for sub in subscriptions}
+    users_by_id = {user.id: user for user in user_repo.find_by_ids(list(user_ids))}
+    plans_by_id = {plan.id: plan for plan in plan_repo.find_by_ids(list(plan_ids))}
+
     # Enrich subscriptions with user and plan info for admin display
     result = []
     for sub in subscriptions:
         sub_dict = sub.to_dict()
         # Add user email
-        user = user_repo.find_by_id(str(sub.user_id))
+        user = users_by_id.get(sub.user_id)
         sub_dict["user_email"] = user.email if user else ""
         # Add plan name
-        plan = plan_repo.find_by_id(str(sub.tarif_plan_id))
+        plan = plans_by_id.get(sub.tarif_plan_id)
         sub_dict["plan_name"] = plan.name if plan else ""
         # Add created_at for sorting
         sub_dict["created_at"] = sub.created_at.isoformat() if sub.created_at else None

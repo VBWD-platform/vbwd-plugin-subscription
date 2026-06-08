@@ -10,12 +10,53 @@ from vbwd.extensions import db
 logger = logging.getLogger(__name__)
 
 
+def seed_baseline_currency():
+    """Idempotently create the default ``EUR`` currency through the repository.
+
+    The detail route (``GET /api/v1/tarif-plans/<slug>``) resolves pricing via
+    ``CurrencyService.get_currency_by_code``; without a baseline currency the
+    lookup returns ``None`` and the route can only fall back to the bare price.
+    Seeding the default EUR here makes every seeded instance return priced
+    bodies. Goes through ``CurrencyRepository`` (no raw SQL) and is a no-op when
+    EUR already exists.
+
+    Returns:
+        True when a new EUR row was created, False when one already existed.
+    """
+    from decimal import Decimal
+    from uuid import uuid4
+
+    from vbwd.models.currency import Currency
+    from vbwd.repositories.currency_repository import CurrencyRepository
+
+    repository = CurrencyRepository(db.session)
+    if repository.find_by_code("EUR"):
+        return False
+
+    repository.save(
+        Currency(
+            id=uuid4(),
+            code="EUR",
+            name="Euro",
+            symbol="€",
+            exchange_rate=Decimal("1.0"),
+            is_default=True,
+            is_active=True,
+            decimal_places=2,
+        )
+    )
+    logger.info("[subscription] Created baseline currency: EUR")
+    return True
+
+
 def populate(app=None):
     """Populate subscription demo data (idempotent)."""
     from plugins.subscription.subscription.models import (
         TarifPlan,
         TarifPlanCategory,
     )
+
+    seed_baseline_currency()
 
     # Category
     category = (

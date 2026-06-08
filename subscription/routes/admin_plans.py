@@ -15,6 +15,7 @@ from vbwd.extensions import db
 from plugins.subscription.subscription.models import TarifPlan
 from plugins.subscription.subscription.models import Subscription
 from vbwd.models.enums import SubscriptionStatus
+from plugins.subscription.subscription.cache_keys import invalidate_plan_cache
 from plugins.subscription.subscription.routes import subscription_bp
 
 
@@ -125,6 +126,7 @@ def admin_create_plan():
 
         plan_repo = TarifPlanRepository(db.session)
         saved_plan = plan_repo.save(plan)
+        invalidate_plan_cache()
 
         return (
             jsonify(
@@ -215,6 +217,7 @@ def admin_update_plan(plan_id):
         plan.trial_days = int(data["trial_days"])
 
     saved_plan = plan_repo.save(plan)
+    invalidate_plan_cache()
 
     return jsonify({"plan": saved_plan.to_dict()}), 200
 
@@ -255,6 +258,7 @@ def admin_delete_plan(plan_id):
         )
 
     plan_repo.delete(plan_id)
+    invalidate_plan_cache()
 
     return jsonify({"message": "Plan deleted successfully"}), 200
 
@@ -284,6 +288,7 @@ def admin_deactivate_plan(plan_id):
 
     plan.is_active = False
     saved_plan = plan_repo.save(plan)
+    invalidate_plan_cache()
 
     return jsonify({"plan": saved_plan.to_dict(), "message": "Plan deactivated"}), 200
 
@@ -311,6 +316,7 @@ def admin_activate_plan(plan_id):
 
     plan.is_active = True
     saved_plan = plan_repo.save(plan)
+    invalidate_plan_cache()
 
     return jsonify({"plan": saved_plan.to_dict(), "message": "Plan activated"}), 200
 
@@ -366,6 +372,7 @@ def admin_copy_plan(plan_id):
     )
 
     saved_plan = plan_repo.save(new_plan)
+    invalidate_plan_cache()
 
     return (
         jsonify({"plan": saved_plan.to_dict(), "message": "Plan copied successfully"}),

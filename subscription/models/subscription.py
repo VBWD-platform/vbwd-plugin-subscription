@@ -26,6 +26,7 @@ class Subscription(BaseModel):
         UUID(as_uuid=True),
         db.ForeignKey("subscription_tarif_plan.id"),
         nullable=False,
+        index=True,
     )
     pending_plan_id = db.Column(
         UUID(as_uuid=True),
