@@ -19,7 +19,7 @@ import uuid
 
 import pytest
 
-from vbwd.services.data_exchange.envelope import build_envelope
+from vbwd.services.data_exchange.envelope import build_envelope, rows_to_csv
 from vbwd.services.data_exchange.port import (
     CLUSTER_SALES,
     ExportSelector,
@@ -149,6 +149,39 @@ class TestSubscriptionsExportOnly:
             ExportSelector(ids=[str(sub.id)]), include_pii=True
         ).rows
         assert with_pii[0]["user_id"] == sub.user_id
+
+
+class TestCsvExport:
+    """Sales entities list ``csv`` and CSV-export through ``rows_to_csv``."""
+
+    def test_subscription_plans_csv_export(self, db):
+        slug = f"plan-{uuid.uuid4().hex[:8]}"
+        db.session.add(
+            TarifPlan(
+                slug=slug,
+                name="Gold",
+                price_float=19.0,
+                billing_period=BillingPeriod.MONTHLY,
+            )
+        )
+        db.session.commit()
+        exchanger = _exchangers(db.session)["subscription_plans"]
+        assert "csv" in exchanger.supported_formats
+        rows = exchanger.export(ExportSelector(ids=[slug]), include_pii=False).rows
+        csv_text = rows_to_csv(rows)
+        assert "slug" in csv_text.splitlines()[0]
+        assert slug in csv_text
+
+    def test_subscriptions_csv_export(self, db):
+        sub = TestSubscriptionsExportOnly()._seed_subscription(db)
+        exchanger = _exchangers(db.session)["subscriptions"]
+        assert "csv" in exchanger.supported_formats
+        rows = exchanger.export(
+            ExportSelector(ids=[str(sub.id)]), include_pii=True
+        ).rows
+        csv_text = rows_to_csv(rows)
+        assert csv_text.splitlines()[0]  # non-empty header row
+        assert len(csv_text.splitlines()) >= 2
 
 
 class TestRegistration:

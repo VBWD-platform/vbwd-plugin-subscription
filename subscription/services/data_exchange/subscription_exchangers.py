@@ -35,6 +35,7 @@ exchanger / existing models); Liskov (export-only raises); clean code; no
 overengineering. Quality guard: ``bin/pre-commit-check.sh --plugin subscription
 --full``.
 """
+from enum import Enum
 from typing import Any, List, Optional
 
 from vbwd.services.data_exchange.base_model_exchanger import BaseModelExchanger
@@ -126,7 +127,7 @@ class SubscriptionsExchanger(EntityExchanger):
     natural_key = "id"
     supports_export = True
     supports_import = False
-    supported_formats = frozenset({"json"})
+    supported_formats = frozenset({"json", "csv"})
     secret_fields = frozenset({"provider_subscription_id"})
     pii_fields = frozenset({"user_id"})
 
@@ -165,6 +166,8 @@ class SubscriptionsExchanger(EntityExchanger):
             value = getattr(row, field_name)
             if field_name in self.pii_fields and not include_pii:
                 value = None
+            elif isinstance(value, Enum):
+                value = value.value
             result[field_name] = value
         return result
 
@@ -206,6 +209,7 @@ def build_subscription_exchangers(session: Any) -> List[EntityExchanger]:
                 "is_active",
                 "sort_order",
             ],
+            supported_formats=frozenset({"json", "csv"}),
             view_permission=PERM_PLANS_VIEW,
             manage_permission=PERM_PLANS_MANAGE,
         ),
@@ -228,6 +232,7 @@ def build_subscription_exchangers(session: Any) -> List[EntityExchanger]:
                 "is_active",
                 "sort_order",
             ],
+            supported_formats=frozenset({"json", "csv"}),
             view_permission=PERM_PLANS_VIEW,
             manage_permission=PERM_ADDONS_MANAGE,
         ),
