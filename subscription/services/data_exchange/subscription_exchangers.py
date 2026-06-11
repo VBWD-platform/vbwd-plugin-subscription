@@ -113,6 +113,119 @@ class _PermissionMappedModelExchanger(BaseModelExchanger):
         return self._manage_permission
 
 
+class _CategoryExchanger(_PermissionMappedModelExchanger):
+    """``TarifPlanCategory`` exchanger carrying the self-referential parent.
+
+    The category tree references itself by ``parent_id`` (a local UUID).
+    ``fk_natural_key_map`` is export-only, so this subclass exports the parent's
+    ``slug`` as ``parent_slug`` and — because the base import writes row values
+    straight onto the model — resolves that slug back to the local parent id on
+    import (skip-with-error if the parent is absent, never crash — Liskov).
+    """
+
+    PARENT_SLUG_FIELD = "parent_slug"
+
+    def _serialise_row(self, row: Any, *, include_pii: bool) -> dict:
+        serialised = super()._serialise_row(row, include_pii=include_pii)
+        parent = getattr(row, "parent", None)
+        serialised[self.PARENT_SLUG_FIELD] = parent.slug if parent is not None else None
+        return serialised
+
+    def _import_row(
+        self, row: dict, index: int, result: ImportResult, *, dry_run: bool
+    ) -> None:
+        parent_slug = row.pop(self.PARENT_SLUG_FIELD, None)
+        parent_id = None
+        if parent_slug:
+            parent = self._repository.find_by_natural_key(parent_slug)
+            if parent is None:
+                result.errors.append(
+                    {
+                        "row": index,
+                        "reason": f"unknown parent category slug '{parent_slug}'",
+                    }
+                )
+                return
+            parent_id = parent.id
+        row = {**row, "parent_id": parent_id}
+        super()._import_row(row, index, result, dry_run=dry_run)
+
+
+class _M2MSlugExchanger(_PermissionMappedModelExchanger):
+    """A ``BaseModelExchanger`` carrying one M2M relationship by referent slug.
+
+    The base export writes only scalar columns and the base import writes row
+    values straight onto the model, so an M2M link cannot travel through
+    ``fk_natural_key_map``. This subclass serialises the related rows' slugs into
+    a list field on export and, on import, resolves each slug to a local row and
+    assigns the relationship (skip-with-error on an unknown slug — Liskov).
+    """
+
+    def __init__(
+        self,
+        *,
+        link_field: str,
+        relationship_attr: str,
+        related_model: type,
+        related_natural_key: str,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._link_field = link_field
+        self._relationship_attr = relationship_attr
+        self._related_model = related_model
+        self._related_natural_key = related_natural_key
+
+    def _serialise_row(self, row: Any, *, include_pii: bool) -> dict:
+        serialised = super()._serialise_row(row, include_pii=include_pii)
+        related = getattr(row, self._relationship_attr)
+        serialised[self._link_field] = [
+            getattr(item, self._related_natural_key) for item in related
+        ]
+        return serialised
+
+    def _resolve_related(
+        self, slugs: List[Any], index: int, result: ImportResult
+    ) -> Optional[List[Any]]:
+        resolved: List[Any] = []
+        for slug in slugs:
+            column = getattr(self._related_model, self._related_natural_key)
+            related = (
+                self._session.query(self._related_model).filter(column == slug).first()
+            )
+            if related is None:
+                result.errors.append(
+                    {
+                        "row": index,
+                        "reason": (
+                            f"unknown {self._link_field} '{slug}' for "
+                            f"{self.entity_key}"
+                        ),
+                    }
+                )
+                return None
+            resolved.append(related)
+        return resolved
+
+    def _import_row(
+        self, row: dict, index: int, result: ImportResult, *, dry_run: bool
+    ) -> None:
+        slugs = row.pop(self._link_field, None) or []
+        related = self._resolve_related(slugs, index, result)
+        if related is None:
+            return
+        created_before = result.created
+        updated_before = result.updated
+        super()._import_row(row, index, result, dry_run=dry_run)
+        if dry_run:
+            return
+        applied = result.created > created_before or result.updated > updated_before
+        if applied:
+            instance = self._repository.find_by_natural_key(row.get(self.natural_key))
+            if instance is not None:
+                setattr(instance, self._relationship_attr, related)
+
+
 class SubscriptionsExchanger(EntityExchanger):
     """``Subscription`` records, keyed by ``id`` — export-only.
 
@@ -186,10 +299,32 @@ def build_subscription_exchangers(session: Any) -> List[EntityExchanger]:
     """Construct the subscription exchangers bound to ``session``."""
     from plugins.subscription.subscription.models.addon import AddOn
     from plugins.subscription.subscription.models.tarif_plan import TarifPlan
+    from plugins.subscription.subscription.models.tarif_plan_category import (
+        TarifPlanCategory,
+    )
 
     return [
         SubscriptionsExchanger(session),
-        _PermissionMappedModelExchanger(
+        _CategoryExchanger(
+            entity_key="subscription_categories",
+            label="Plan Categories",
+            cluster=CLUSTER_SALES,
+            natural_key="slug",
+            model_class=TarifPlanCategory,
+            repository=_SessionModelRepository(session, TarifPlanCategory, "slug"),
+            session=session,
+            public_fields=[
+                "slug",
+                "name",
+                "description",
+                "is_single",
+                "sort_order",
+            ],
+            supported_formats=frozenset({"json", "csv"}),
+            view_permission=PERM_PLANS_VIEW,
+            manage_permission=PERM_PLANS_MANAGE,
+        ),
+        _M2MSlugExchanger(
             entity_key="subscription_plans",
             label="Subscription Plans",
             cluster=CLUSTER_SALES,
@@ -212,8 +347,12 @@ def build_subscription_exchangers(session: Any) -> List[EntityExchanger]:
             supported_formats=frozenset({"json", "csv"}),
             view_permission=PERM_PLANS_VIEW,
             manage_permission=PERM_PLANS_MANAGE,
+            link_field="category_slugs",
+            relationship_attr="categories",
+            related_model=TarifPlanCategory,
+            related_natural_key="slug",
         ),
-        _PermissionMappedModelExchanger(
+        _M2MSlugExchanger(
             entity_key="subscription_addons",
             label="Subscription Add-ons",
             cluster=CLUSTER_SALES,
@@ -235,6 +374,10 @@ def build_subscription_exchangers(session: Any) -> List[EntityExchanger]:
             supported_formats=frozenset({"json", "csv"}),
             view_permission=PERM_PLANS_VIEW,
             manage_permission=PERM_ADDONS_MANAGE,
+            link_field="tarif_plan_slugs",
+            relationship_attr="tarif_plans",
+            related_model=TarifPlan,
+            related_natural_key="slug",
         ),
     ]
 
