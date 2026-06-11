@@ -27,6 +27,13 @@ jobs:
         with:
           path: vbwd-backend/plugins/subscription
 
+      # ── 2b. Clone bot_base dependency (bot_storefront tests import it) ────
+      - name: Clone bot_base dependency
+        uses: actions/checkout@v4
+        with:
+          repository: VBWD-platform/vbwd-plugin-bot-base
+          path: vbwd-backend/plugins/bot_base
+
       # ── 3. Style checks (black · flake8 · mypy) ───────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
