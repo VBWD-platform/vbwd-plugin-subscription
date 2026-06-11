@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, List, Optional, Protocol
 
 from vbwd.models.enums import LineItemType
@@ -33,6 +34,9 @@ ITEM_TYPE_ADD_ON = LineItemType.ADD_ON.value
 ITEM_TYPE_TOKEN_BUNDLE = LineItemType.TOKEN_BUNDLE.value
 
 DEFAULT_QUANTITY = 1
+# The fallback cart currency when a draft has no currency-bearing line (e.g. an
+# empty cart, or a draft of token bundles which price in the system default).
+DEFAULT_CART_CURRENCY = "EUR"
 _TOKEN_BYTES = 24  # → 32-char urlsafe token (well under the 64-char column).
 
 
@@ -103,6 +107,96 @@ class BotStorefrontService:
     def get_draft(self, provider_id: str, chat_ref: str) -> Optional[BotCheckoutDraft]:
         """The current draft for a chat, if one exists."""
         return self._draft_repository.find_by_chat(provider_id, chat_ref)
+
+    def clear_draft(self, provider_id: str, chat_ref: str) -> BotCheckoutDraft:
+        """Empty the chat's draft (``/cart-clear``). A missing draft is created
+        empty so the caller always gets a consistent now-empty draft back."""
+        draft = self._get_or_create_draft(provider_id, chat_ref)
+        return self._store_items(draft, [])
+
+    def remove_item(
+        self, provider_id: str, chat_ref: str, item_type: str, item_id: str
+    ) -> BotCheckoutDraft:
+        """Drop the matching ``(item_type, item_id)`` line from the draft
+        (``/cart-edit`` remove tap). Absent → a no-op leaving the draft as-is."""
+        draft = self._get_or_create_draft(provider_id, chat_ref)
+        items = [
+            item
+            for item in self._items(draft)
+            if not (item["item_type"] == item_type and item["item_id"] == item_id)
+        ]
+        return self._store_items(draft, items)
+
+    # ── /cart: recompute the current draft against the live catalogs ──────────
+    def compute_cart(
+        self,
+        provider_id: str,
+        chat_ref: str,
+        *,
+        plan_lookup: Callable[[str], Optional[_PricedCatalogItem]],
+        addon_lookup: Callable[[str], Optional[_PricedCatalogItem]],
+        bundle_lookup: Callable[[str], Optional[_TokenBundleItem]],
+    ) -> dict:
+        """Recompute the chat's draft into a priced cart summary.
+
+        Returns ``{"items": [...], "total": str, "currency": str}`` where each
+        item is ``{item_type, item_id, name, quantity, unit_price, line_total}``.
+        Prices/names are read **live** from the catalogs (the persisted draft
+        holds no prices — never trusted). An empty / missing draft yields an
+        empty cart with a ``"0"`` total. A catalog entry that has vanished since
+        the tap is silently dropped (consistent with ``resolve_token``)."""
+        draft = self._draft_repository.find_by_chat(provider_id, chat_ref)
+        if draft is None:
+            return {"items": [], "total": "0", "currency": DEFAULT_CART_CURRENCY}
+
+        resolved = self._recompute_line_items(
+            draft,
+            plan_lookup=plan_lookup,
+            addon_lookup=addon_lookup,
+            bundle_lookup=bundle_lookup,
+        )
+        return self._summarize_cart(resolved)
+
+    def _summarize_cart(self, resolved: List[dict]) -> dict:
+        items: List[dict] = []
+        total = Decimal("0")
+        currency: Optional[str] = None
+        for line in resolved:
+            quantity = line.get("quantity", DEFAULT_QUANTITY)
+            unit_price = self._to_decimal(line.get("unit_price"))
+            line_total = unit_price * quantity
+            total += line_total
+            if currency is None and line.get("currency"):
+                currency = line["currency"]
+            items.append(
+                {
+                    "item_type": line["item_type"],
+                    "item_id": line["item_id"],
+                    "name": line["name"],
+                    "quantity": quantity,
+                    "unit_price": self._format_amount(unit_price),
+                    "line_total": self._format_amount(line_total),
+                }
+            )
+        return {
+            "items": items,
+            "total": self._format_amount(total) if items else "0",
+            "currency": currency or DEFAULT_CART_CURRENCY,
+        }
+
+    @staticmethod
+    def _to_decimal(value: Any) -> Decimal:
+        if value is None:
+            return Decimal("0")
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return Decimal("0")
+
+    @staticmethod
+    def _format_amount(amount: Decimal) -> str:
+        """Two-decimal string (matches the persisted/str price convention)."""
+        return f"{amount:.2f}"
 
     # ── /checkout: mint a one-time TTL token ─────────────────────────────────
     def mint_checkout_token(self, provider_id: str, chat_ref: str) -> Optional[str]:

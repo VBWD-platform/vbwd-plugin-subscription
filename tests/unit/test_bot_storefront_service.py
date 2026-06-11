@@ -244,3 +244,87 @@ class TestResolveTokenSecurity:
 
         with pytest.raises(DraftResolutionError):
             self._resolve(service, token)  # second use 404s
+
+
+def _lookups():
+    return dict(
+        plan_lookup=lambda _id: _plan(price="29.00"),
+        addon_lookup=lambda _id: _addon(price="9.00"),
+        bundle_lookup=lambda _id: _bundle(price="5.00"),
+    )
+
+
+class TestClearDraft:
+    def test_clear_draft_empties_the_line_items(self):
+        service = _service()
+        service.set_plan(PROVIDER, CHAT, "plan-a")
+        service.toggle_addon(PROVIDER, CHAT, "addon-x")
+
+        draft = service.clear_draft(PROVIDER, CHAT)
+
+        assert draft.line_items == []
+
+    def test_clear_draft_with_no_draft_is_a_noop_empty(self):
+        service = _service()
+        draft = service.clear_draft(PROVIDER, CHAT)
+        assert draft.line_items == []
+
+
+class TestRemoveItem:
+    def test_remove_item_drops_the_matching_line(self):
+        service = _service()
+        service.set_plan(PROVIDER, CHAT, "plan-a")
+        service.toggle_addon(PROVIDER, CHAT, "addon-x")
+
+        draft = service.remove_item(PROVIDER, CHAT, ITEM_TYPE_ADD_ON, "addon-x")
+
+        assert _item_types(draft) == [ITEM_TYPE_SUBSCRIPTION]
+        assert _item_ids(draft) == ["plan-a"]
+
+    def test_remove_item_absent_is_a_noop(self):
+        service = _service()
+        service.set_plan(PROVIDER, CHAT, "plan-a")
+
+        draft = service.remove_item(PROVIDER, CHAT, ITEM_TYPE_ADD_ON, "ghost")
+
+        assert _item_types(draft) == [ITEM_TYPE_SUBSCRIPTION]
+
+
+class TestComputeCart:
+    def test_empty_draft_is_an_empty_cart(self):
+        service = _service()
+        cart = service.compute_cart(PROVIDER, CHAT, **_lookups())
+        assert cart["items"] == []
+        assert cart["total"] == "0"
+
+    def test_recomputes_prices_from_catalog_not_persisted(self):
+        service = _service()
+        service.set_plan(PROVIDER, CHAT, "plan-a")
+        service.toggle_addon(PROVIDER, CHAT, "addon-x")
+
+        cart = service.compute_cart(PROVIDER, CHAT, **_lookups())
+
+        names = {item["name"] for item in cart["items"]}
+        assert names == {"Pro", "Extra"}
+        plan_line = next(i for i in cart["items"] if i["name"] == "Pro")
+        assert plan_line["unit_price"] == "29.00"
+        assert plan_line["quantity"] == 1
+        assert plan_line["line_total"] == "29.00"
+        # 29.00 + 9.00 = 38.00
+        assert cart["total"] == "38.00"
+        assert cart["currency"] == "EUR"
+
+    def test_vanished_catalog_entry_is_dropped(self):
+        service = _service()
+        service.set_plan(PROVIDER, CHAT, "plan-a")
+
+        cart = service.compute_cart(
+            PROVIDER,
+            CHAT,
+            plan_lookup=lambda _id: None,
+            addon_lookup=lambda _id: None,
+            bundle_lookup=lambda _id: None,
+        )
+
+        assert cart["items"] == []
+        assert cart["total"] == "0"

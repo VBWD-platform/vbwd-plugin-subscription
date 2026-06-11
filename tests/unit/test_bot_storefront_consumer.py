@@ -23,6 +23,9 @@ from plugins.subscription import SubscriptionPlugin
 from plugins.subscription.subscription.services.bot_storefront_commands import (
     ACTION_SELECT_PLAN,
     ADD_ONS_COMMAND,
+    CART_CLEAR_COMMAND,
+    CART_COMMAND,
+    CART_EDIT_COMMAND,
     CHECKOUT_COMMAND,
     TARIFS_COMMAND,
     TOKENS_COMMAND,
@@ -67,6 +70,9 @@ class TestCommandRegistryCollection:
             ADD_ONS_COMMAND,
             TOKENS_COMMAND,
             CHECKOUT_COMMAND,
+            CART_COMMAND,
+            CART_CLEAR_COMMAND,
+            CART_EDIT_COMMAND,
         ):
             assert index[name] is enabled_plugin
 
@@ -96,6 +102,9 @@ class TestHandleActionDispatch:
         fake_handler.add_ons_reply.return_value = BotReply(text="add-ons")
         fake_handler.tokens_reply.return_value = BotReply(text="tokens")
         fake_handler.checkout_reply.return_value = BotReply(text="checkout")
+        fake_handler.cart_reply.return_value = BotReply(text="cart")
+        fake_handler.cart_clear_reply.return_value = BotReply(text="cart-cleared")
+        fake_handler.cart_edit_reply.return_value = BotReply(text="cart-edit")
         fake_handler.apply_action.return_value = BotReply(text="applied")
         monkeypatch.setattr(plugin, "_build_storefront_commands", lambda: fake_handler)
         return fake_handler
@@ -132,6 +141,28 @@ class TestHandleActionDispatch:
         enabled_plugin.handle_action(_inbound(action_data=action_data))
         handler.apply_action.assert_called_once_with(
             provider_id="telegram", chat_ref="4242", action_data=action_data
+        )
+
+    def test_cart_command(self, enabled_plugin, monkeypatch):
+        handler = self._with_fake_handler(enabled_plugin, monkeypatch)
+        reply = enabled_plugin.handle_action(_inbound(command=CART_COMMAND))
+        handler.cart_reply.assert_called_once_with(
+            provider_id="telegram", chat_ref="4242"
+        )
+        assert reply.text == "cart"
+
+    def test_cart_clear_command(self, enabled_plugin, monkeypatch):
+        handler = self._with_fake_handler(enabled_plugin, monkeypatch)
+        enabled_plugin.handle_action(_inbound(command=CART_CLEAR_COMMAND))
+        handler.cart_clear_reply.assert_called_once_with(
+            provider_id="telegram", chat_ref="4242"
+        )
+
+    def test_cart_edit_command(self, enabled_plugin, monkeypatch):
+        handler = self._with_fake_handler(enabled_plugin, monkeypatch)
+        enabled_plugin.handle_action(_inbound(command=CART_EDIT_COMMAND))
+        handler.cart_edit_reply.assert_called_once_with(
+            provider_id="telegram", chat_ref="4242"
         )
 
 

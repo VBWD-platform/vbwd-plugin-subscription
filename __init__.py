@@ -491,6 +491,9 @@ class SubscriptionPlugin(BasePlugin):
         from plugins.bot_base.bot_base.types import BotCommand
         from plugins.subscription.subscription.services.bot_storefront_commands import (
             ADD_ONS_COMMAND,
+            CART_CLEAR_COMMAND,
+            CART_COMMAND,
+            CART_EDIT_COMMAND,
             CHECKOUT_COMMAND,
             TARIFS_COMMAND,
             TOKENS_COMMAND,
@@ -505,6 +508,9 @@ class SubscriptionPlugin(BasePlugin):
             command(TARIFS_COMMAND, "Browse tarif plans"),
             command(ADD_ONS_COMMAND, "Browse add-ons"),
             command(TOKENS_COMMAND, "Browse token bundles (and your balance)"),
+            command(CART_COMMAND, "Show your cart"),
+            command(CART_EDIT_COMMAND, "Edit your cart (remove items)"),
+            command(CART_CLEAR_COMMAND, "Empty your cart"),
             command(CHECKOUT_COMMAND, "Get a link to complete your purchase"),
         ]
 
@@ -517,6 +523,9 @@ class SubscriptionPlugin(BasePlugin):
         """
         from plugins.subscription.subscription.services.bot_storefront_commands import (
             ADD_ONS_COMMAND,
+            CART_CLEAR_COMMAND,
+            CART_COMMAND,
+            CART_EDIT_COMMAND,
             CHECKOUT_COMMAND,
             TARIFS_COMMAND,
             TOKENS_COMMAND,
@@ -532,6 +541,12 @@ class SubscriptionPlugin(BasePlugin):
             return commands.add_ons_reply()
         if context.command == TOKENS_COMMAND:
             return commands.tokens_reply(identity=context.identity)
+        if context.command == CART_COMMAND:
+            return commands.cart_reply(provider_id=provider_id, chat_ref=chat_ref)
+        if context.command == CART_CLEAR_COMMAND:
+            return commands.cart_clear_reply(provider_id=provider_id, chat_ref=chat_ref)
+        if context.command == CART_EDIT_COMMAND:
+            return commands.cart_edit_reply(provider_id=provider_id, chat_ref=chat_ref)
         if context.command == CHECKOUT_COMMAND:
             return commands.checkout_reply(provider_id=provider_id, chat_ref=chat_ref)
 
@@ -545,7 +560,7 @@ class SubscriptionPlugin(BasePlugin):
         from plugins.bot_base.bot_base.types import BotReply
 
         return BotReply(
-            text="Send /tarifs, /add-ons, /tokens, or /checkout to shop.",
+            text="Send /tarifs, /add-ons, /tokens, /cart, or /checkout to shop.",
             choices=[],
         )
 
@@ -581,9 +596,11 @@ class SubscriptionPlugin(BasePlugin):
             active_addons=self._active_addons,
             active_token_bundles=self._active_token_bundles,
             checkout_link_base_url=base_url,
-            reply_factory=lambda *, text, choices: BotReply(text=text, choices=choices),
-            choice_factory=lambda *, label, action_data: BotChoice(
-                label=label, action_data=action_data
+            reply_factory=lambda *, text, choices, meta=None: BotReply(
+                text=text, choices=choices, meta=meta
+            ),
+            choice_factory=lambda *, label, action_data, hint=None: BotChoice(
+                label=label, action_data=action_data, hint=hint
             ),
             balance_reader=self._read_token_balance,
         )
