@@ -1,5 +1,15 @@
 """Subscription plugin — plans, subscriptions, add-ons, categories, checkout."""
+from typing import List, Optional, TYPE_CHECKING
+
 from vbwd.plugins.base import BasePlugin, PluginMetadata
+
+if TYPE_CHECKING:
+    # Bot-base is an OPTIONAL bridge (S45 / S53.0 / D1 inversion). It is imported
+    # only for type checking here; at runtime the bot-storefront methods lazily
+    # import the neutral DTOs inside their bodies, so ``subscription`` imports
+    # cleanly even when bot-base is absent (no hard dependency, no top-level
+    # ``bot_base`` import). Mirrors plugins/chat and plugins/taro exactly.
+    from plugins.bot_base.bot_base.types import BotCommand, BotInbound, BotReply
 
 
 DEFAULT_CONFIG = {
@@ -9,7 +19,18 @@ DEFAULT_CONFIG = {
     "max_subscriptions_per_user": 10,
     "allow_downgrade": True,
     "proration_enabled": True,
+    # ── bot commerce storefront (S53.0) ──────────────────────────────────────
+    # When false (default) get_bot_commands() returns [] so bot-base never
+    # surfaces the storefront commands — web behaviour is entirely unchanged.
+    "bot_storefront_enabled": False,
+    # The public fe-user origin the /checkout draft link points at.
+    "checkout_link_base_url": "",
+    # How long a minted one-time checkout-draft token stays resolvable.
+    "checkout_draft_ttl_seconds": 900,
 }
+
+
+BOT_NAMESPACE = "subscription"
 
 
 # Frontend event types this plugin contributes to the core security whitelist
@@ -44,6 +65,10 @@ def unregister_subscription_frontend_event_types() -> None:
 
 
 class SubscriptionPlugin(BasePlugin):
+    #: The owning namespace bot-base routes commands / taps to (D1/D7). A class
+    #: attribute so the plugin structurally implements ``BotCommandProvider``.
+    bot_namespace = BOT_NAMESPACE
+
     @property
     def metadata(self) -> PluginMetadata:
         return PluginMetadata(
@@ -449,3 +474,162 @@ class SubscriptionPlugin(BasePlugin):
                 "is_single": True,
             },
         ]
+
+    # ── bot-base consumer seam: commerce storefront (S53.0) ───────────────────
+    def get_bot_commands(self) -> List["BotCommand"]:
+        """The storefront commands ``subscription`` contributes to the bot menu.
+
+        Returns ``[]`` when ``bot_storefront_enabled`` is false so bot-base's
+        ``CommandRegistry`` never surfaces ``/tarifs`` / ``/add-ons`` /
+        ``/tokens`` / ``/checkout`` — the subscription web app stays entirely
+        untouched. The neutral ``BotCommand`` DTO is imported lazily so this
+        module loads even when bot-base is absent (the bridge is optional).
+        """
+        if not self.get_config("bot_storefront_enabled", False):
+            return []
+
+        from plugins.bot_base.bot_base.types import BotCommand
+        from plugins.subscription.subscription.services.bot_storefront_commands import (
+            ADD_ONS_COMMAND,
+            CHECKOUT_COMMAND,
+            TARIFS_COMMAND,
+            TOKENS_COMMAND,
+        )
+
+        def command(name: str, description: str) -> "BotCommand":
+            return BotCommand(
+                name=name, description=description, namespace=BOT_NAMESPACE
+            )
+
+        return [
+            command(TARIFS_COMMAND, "Browse tarif plans"),
+            command(ADD_ONS_COMMAND, "Browse add-ons"),
+            command(TOKENS_COMMAND, "Browse token bundles (and your balance)"),
+            command(CHECKOUT_COMMAND, "Get a link to complete your purchase"),
+        ]
+
+    def handle_action(self, context: "BotInbound") -> "BotReply":
+        """Handle a storefront command or a tapped choice routed to ``subscription``.
+
+        Every storefront path is ANONYMOUS — no billing, no identity mutation.
+        The only identity-aware branch is the ``/tokens`` balance line, which is
+        shown when the chat is linked and silently omitted otherwise (D3).
+        """
+        from plugins.subscription.subscription.services.bot_storefront_commands import (
+            ADD_ONS_COMMAND,
+            CHECKOUT_COMMAND,
+            TARIFS_COMMAND,
+            TOKENS_COMMAND,
+        )
+
+        commands = self._build_storefront_commands()
+        provider_id = context.chat_ref.provider_id
+        chat_ref = context.chat_ref.chat_id
+
+        if context.command == TARIFS_COMMAND:
+            return commands.tarifs_reply()
+        if context.command == ADD_ONS_COMMAND:
+            return commands.add_ons_reply()
+        if context.command == TOKENS_COMMAND:
+            return commands.tokens_reply(identity=context.identity)
+        if context.command == CHECKOUT_COMMAND:
+            return commands.checkout_reply(provider_id=provider_id, chat_ref=chat_ref)
+
+        if context.action_data:
+            return commands.apply_action(
+                provider_id=provider_id,
+                chat_ref=chat_ref,
+                action_data=context.action_data,
+            )
+
+        from plugins.bot_base.bot_base.types import BotReply
+
+        return BotReply(
+            text="Send /tarifs, /add-ons, /tokens, or /checkout to shop.",
+            choices=[],
+        )
+
+    def _build_storefront_commands(self):
+        """Build the storefront command handler wired to live catalogs (DRY).
+
+        Resolves plan/add-on/token-bundle catalogs and the draft service off the
+        live ``db.session`` exactly as the web routes do, and reads the token
+        balance from **core** (``TokenBalanceRepository`` — a plugin→core read,
+        allowed). The neutral ``BotReply`` / ``BotChoice`` constructors are passed
+        in as factories so this builder never hard-imports bot-base at module
+        load.
+        """
+        from flask import current_app
+
+        from plugins.bot_base.bot_base.types import BotChoice, BotReply
+        from plugins.subscription.subscription.services.bot_storefront_commands import (
+            BotStorefrontCommands,
+        )
+
+        config = current_app.config_store.get_config("subscription")
+        ttl_seconds = config.get(
+            "checkout_draft_ttl_seconds",
+            DEFAULT_CONFIG["checkout_draft_ttl_seconds"],
+        )
+        base_url = config.get("checkout_link_base_url", "")
+
+        storefront_service = self._build_storefront_service(ttl_seconds)
+
+        return BotStorefrontCommands(
+            storefront_service=storefront_service,
+            active_plans=self._active_plans,
+            active_addons=self._active_addons,
+            active_token_bundles=self._active_token_bundles,
+            checkout_link_base_url=base_url,
+            reply_factory=lambda *, text, choices: BotReply(text=text, choices=choices),
+            choice_factory=lambda *, label, action_data: BotChoice(
+                label=label, action_data=action_data
+            ),
+            balance_reader=self._read_token_balance,
+        )
+
+    def _build_storefront_service(self, ttl_seconds: int):
+        from vbwd.extensions import db
+        from plugins.subscription.subscription.repositories.bot_checkout_draft_repository import (  # noqa: E501
+            BotCheckoutDraftRepository,
+        )
+        from plugins.subscription.subscription.services.bot_storefront_service import (
+            BotStorefrontService,
+        )
+
+        return BotStorefrontService(
+            BotCheckoutDraftRepository(db.session),
+            checkout_draft_ttl_seconds=ttl_seconds,
+        )
+
+    def _active_plans(self):
+        from vbwd.extensions import db
+        from plugins.subscription.subscription.repositories.tarif_plan_repository import (  # noqa: E501
+            TarifPlanRepository,
+        )
+
+        return TarifPlanRepository(db.session).find_active()
+
+    def _active_addons(self):
+        from vbwd.extensions import db
+        from plugins.subscription.subscription.repositories.addon_repository import (
+            AddOnRepository,
+        )
+
+        return AddOnRepository(db.session).find_active()
+
+    def _active_token_bundles(self):
+        from vbwd.extensions import db
+        from vbwd.repositories.token_bundle_repository import TokenBundleRepository
+
+        return TokenBundleRepository(db.session).find_active()
+
+    def _read_token_balance(self, identity) -> Optional[int]:
+        """Read the core token balance for a linked chat (plugin→core read)."""
+        from vbwd.extensions import db
+        from vbwd.repositories.token_repository import TokenBalanceRepository
+
+        balance = TokenBalanceRepository(db.session).find_by_user_id(
+            identity.vbwd_user_id
+        )
+        return balance.balance if balance is not None else 0

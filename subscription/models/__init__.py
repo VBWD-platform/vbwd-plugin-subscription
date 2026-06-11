@@ -14,6 +14,9 @@ from plugins.subscription.subscription.models.tarif_plan_category import (
     TarifPlanCategory,
     tarif_plan_category_plans,
 )
+from plugins.subscription.subscription.models.bot_checkout_draft import (
+    BotCheckoutDraft,
+)
 
 __all__ = [
     "Subscription",
@@ -23,4 +26,5 @@ __all__ = [
     "AddOnSubscription",
     "TarifPlanCategory",
     "tarif_plan_category_plans",
+    "BotCheckoutDraft",
 ]

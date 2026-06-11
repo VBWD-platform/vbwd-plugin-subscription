@@ -57,6 +57,34 @@
           "description": "Days after payment failure to send reminders (e.g., 3,7)"
         }
       ]
+    },
+    {
+      "id": "bot_storefront",
+      "label": "Bot Storefront",
+      "fields": [
+        {
+          "key": "bot_storefront_enabled",
+          "label": "Enable Bot Storefront",
+          "component": "checkbox",
+          "description": "Expose /tarifs, /add-ons, /tokens and /checkout over the messenger bridge"
+        },
+        {
+          "key": "checkout_link_base_url",
+          "label": "Checkout Link Base URL",
+          "component": "input",
+          "inputType": "text",
+          "description": "Public fe-user origin the /checkout draft link points at (e.g. https://app.example.com)"
+        },
+        {
+          "key": "checkout_draft_ttl_seconds",
+          "label": "Checkout Draft TTL (seconds)",
+          "component": "input",
+          "inputType": "number",
+          "min": 60,
+          "max": 86400,
+          "description": "How long a minted one-time checkout-draft token stays resolvable"
+        }
+      ]
     }
   ]
 }

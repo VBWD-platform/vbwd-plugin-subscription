@@ -4,5 +4,8 @@
   "expiration_check_interval_seconds": 60,
   "max_subscriptions_per_user": 10,
   "allow_downgrade": true,
-  "proration_enabled": true
+  "proration_enabled": true,
+  "bot_storefront_enabled": false,
+  "checkout_link_base_url": "",
+  "checkout_draft_ttl_seconds": 900
 }
