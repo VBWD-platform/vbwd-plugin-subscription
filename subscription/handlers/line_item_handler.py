@@ -73,6 +73,22 @@ class SubscriptionLineItemHandler(ILineItemHandler):
             return str(addon_subscription.addon_id) if addon_subscription else None
         return None
 
+    def resolve_catalog_entity_ref(self, line_item):
+        """Source entity ref for the S77 invoice snapshot.
+
+        SUBSCRIPTION → ``("tarif_plan", plan_id)``, ADD_ON → ``("addon", addon_id)``.
+        ``None`` for any line item this plugin does not own — the catalog id is
+        the same one ``resolve_catalog_item_id`` returns, paired with this
+        plugin's registered entity type.
+        """
+        if line_item.item_type == LineItemType.SUBSCRIPTION:
+            catalog_id = self.resolve_catalog_item_id(line_item)
+            return ("tarif_plan", catalog_id) if catalog_id else None
+        if line_item.item_type == LineItemType.ADD_ON:
+            catalog_id = self.resolve_catalog_item_id(line_item)
+            return ("addon", catalog_id) if catalog_id else None
+        return None
+
     def is_recurring_line_item(self, line_item):
         """SUBSCRIPTION → plan.is_recurring, ADD_ON → addon.is_recurring.
 
@@ -199,27 +215,12 @@ class SubscriptionLineItemHandler(ILineItemHandler):
     def _publish_subscription_event(
         self, event_name: str, subscription, user_id
     ) -> None:
-        """Publish a subscription lifecycle event to EventBus."""
-        try:
-            from vbwd.events.bus import event_bus
+        """Publish a subscription lifecycle event to EventBus (DRY: shared home)."""
+        from plugins.subscription.subscription.services.lifecycle_events import (
+            publish_subscription_event,
+        )
 
-            plan = subscription.tarif_plan
-            event_bus.publish(
-                event_name,
-                {
-                    "subscription_id": str(subscription.id),
-                    "user_id": str(user_id),
-                    "plan_id": str(plan.id) if plan else None,
-                    "plan_slug": plan.slug if plan else None,
-                    "plan_name": plan.name if plan else None,
-                },
-            )
-        except Exception as publish_error:
-            logger.warning(
-                "[subscription] Failed to publish %s: %s",
-                event_name,
-                publish_error,
-            )
+        publish_subscription_event(event_name, subscription, user_id)
 
     def _credit_plan_default_tokens(
         self, subscription, context: LineItemContext
@@ -267,10 +268,20 @@ class SubscriptionLineItemHandler(ILineItemHandler):
         addon_subscription.activated_at = utcnow()
         addon_sub_repo.save(addon_subscription)
 
+        self._publish_addon_event("addon.activated", addon_subscription)
+
         return LineItemResult(
             success=True,
             data={"addon_subscription_id": str(addon_subscription.id)},
         )
+
+    def _publish_addon_event(self, event_name: str, addon_subscription) -> None:
+        """Publish an add-on lifecycle event to EventBus (DRY: shared home)."""
+        from plugins.subscription.subscription.services.lifecycle_events import (
+            publish_addon_event,
+        )
+
+        publish_addon_event(event_name, addon_subscription)
 
     # ── Reversal (refund) ─────────────────────────────────────────────────
 
@@ -330,6 +341,8 @@ class SubscriptionLineItemHandler(ILineItemHandler):
         addon_subscription.status = SubscriptionStatus.CANCELLED
         addon_subscription.cancelled_at = utcnow()
         addon_sub_repo.save(addon_subscription)
+
+        self._publish_addon_event("addon.cancelled", addon_subscription)
 
         return LineItemResult(
             success=True,

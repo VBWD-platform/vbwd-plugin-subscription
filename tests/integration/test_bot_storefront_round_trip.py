@@ -51,9 +51,7 @@ def _make_plan(db, name="Pro", price="9.99"):
         id=uuid4(),
         name=name,
         slug=f"{name.lower()}-{uuid4().hex[:8]}",
-        price_float=float(price),
         price=Decimal(price),
-        currency="EUR",
         billing_period=BillingPeriod.MONTHLY,
         is_active=True,
     )
@@ -68,7 +66,6 @@ def _make_addon(db, name="Extra", price="2.50"):
         name=name,
         slug=f"{name.lower()}-{uuid4().hex[:8]}",
         price=Decimal(price),
-        currency="EUR",
         billing_period=BillingPeriod.MONTHLY.value,
         is_active=True,
     )
@@ -133,8 +130,11 @@ class TestStorefrontRoundTrip:
 
         by_type = {item["item_type"]: item for item in resolved}
         assert by_type[LineItemType.SUBSCRIPTION.value]["item_id"] == str(plan.id)
+        # S85.1 (D4): prices are floats now; ``str(float)`` drops a trailing
+        # zero (2.50 -> "2.5"). Money formatting moves to the display layer in
+        # S85.2/S85.4; here we assert the raw stringified float.
         assert by_type[LineItemType.SUBSCRIPTION.value]["unit_price"] == "9.99"
-        assert by_type[LineItemType.ADD_ON.value]["unit_price"] == "2.50"
+        assert by_type[LineItemType.ADD_ON.value]["unit_price"] == "2.5"
         assert by_type[LineItemType.TOKEN_BUNDLE.value]["name"] == "100 tokens"
 
     def test_public_endpoint_returns_recomputed_line_items(self, db, client):

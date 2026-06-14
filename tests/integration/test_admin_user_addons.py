@@ -54,7 +54,6 @@ def _make_addon_subscription(db, user_id):
         name="Extra Storage",
         slug=f"extra-storage-{uuid4().hex[:8]}",
         price=Decimal("5.00"),
-        currency="EUR",
         billing_period="monthly",
     )
     db.session.add(addon)

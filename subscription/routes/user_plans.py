@@ -1,6 +1,6 @@
 """Tariff plan routes."""
 import uuid
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 from vbwd.extensions import db
 from plugins.subscription.subscription.repositories.tarif_plan_repository import (
     TarifPlanRepository,
@@ -14,6 +14,10 @@ from plugins.subscription.subscription.services.tarif_plan_service import (
     TarifPlanService,
 )
 from vbwd.services.currency_service import CurrencyService
+from vbwd.services.core_settings_store import (
+    get_core_settings,
+    update_core_settings,
+)
 from vbwd.services.tax_service import TaxService
 from vbwd.services.cache import cached_response, resolve_cache_store
 from plugins.subscription.subscription.cache_keys import (
@@ -49,12 +53,17 @@ def list_plans():
         currency_repo = CurrencyRepository(db.session)  # type: ignore[arg-type]
         tax_repo = TaxRepository(db.session)  # type: ignore[arg-type]
 
-        currency_service = CurrencyService(currency_repo=currency_repo)
+        currency_service = CurrencyService(
+            currency_repo=currency_repo,
+            settings_reader=get_core_settings,
+            settings_writer=update_core_settings,
+        )
         tax_service = TaxService(tax_repo=tax_repo)
         tarif_plan_service = TarifPlanService(
             tarif_plan_repo=plan_repo,
             currency_service=currency_service,
             tax_service=tax_service,
+            price_factory=current_app.container.price_factory(),
         )
 
         # Get active plans, optionally filtered by category
@@ -84,7 +93,7 @@ def list_plans():
                     "name": plan.name,
                     "slug": plan.slug,
                     "description": plan.description,
-                    "price": plan.price_float,
+                    "price": plan.raw_price,
                     "billing_period": plan.billing_period.value,
                     "is_active": plan.is_active,
                     "error": str(e),
@@ -140,12 +149,17 @@ def get_plan(slug_or_id: str):
         currency_repo = CurrencyRepository(db.session)  # type: ignore[arg-type]
         tax_repo = TaxRepository(db.session)  # type: ignore[arg-type]
 
-        currency_service = CurrencyService(currency_repo=currency_repo)
+        currency_service = CurrencyService(
+            currency_repo=currency_repo,
+            settings_reader=get_core_settings,
+            settings_writer=update_core_settings,
+        )
         tax_service = TaxService(tax_repo=tax_repo)
         tarif_plan_service = TarifPlanService(
             tarif_plan_repo=plan_repo,
             currency_service=currency_service,
             tax_service=tax_service,
+            price_factory=current_app.container.price_factory(),
         )
 
         # Get plan by UUID or slug
@@ -174,6 +188,19 @@ def get_plan(slug_or_id: str):
             plan_data.update(pricing)
         except ValueError as pricing_error:
             plan_data["pricing_error"] = str(pricing_error)
+
+        # S77 — append the generic tags / custom fields (opt-in, no model
+        # import). The fe-user tarif card reads these keys + the field defs
+        # (labels + types) off the payload without an extra round trip.
+        from vbwd.services.tags_and_custom_fields import (
+            append_tags_and_custom_fields,
+            resolve_tags_and_custom_fields,
+        )
+
+        append_tags_and_custom_fields(plan_data, "tarif_plan", plan.id)
+        plan_data[
+            "custom_field_defs"
+        ] = resolve_tags_and_custom_fields().get_field_defs("tarif_plan")
         return plan_data, 200
 
     # Cache 2xx only, keyed by (slug-or-id, currency, country). A 404 is never

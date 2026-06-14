@@ -29,7 +29,7 @@ def test_tarif_plan_save_then_round_trips_through_real_db(db):
         name="Smoke Plan",
         slug="smoke-plan",
         description="Round-trip smoke test plan",
-        price_float=19.99,
+        price=19.99,
         billing_period=BillingPeriod.MONTHLY,
         is_active=True,
         sort_order=0,
@@ -41,7 +41,7 @@ def test_tarif_plan_save_then_round_trips_through_real_db(db):
 
     assert fetched_by_slug is not None
     assert fetched_by_slug.id == saved_plan.id
-    assert fetched_by_slug.price_float == 19.99
+    assert fetched_by_slug.price == 19.99
     assert fetched_by_slug.billing_period == BillingPeriod.MONTHLY
 
     assert any(plan.id == saved_plan.id for plan in active_plans)

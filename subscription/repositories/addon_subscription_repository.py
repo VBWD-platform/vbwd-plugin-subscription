@@ -60,6 +60,26 @@ class AddOnSubscriptionRepository(BaseRepository[AddOnSubscription]):
             .all()
         )
 
+    def find_active_by_user_list(self, user_id: UUID) -> List[AddOnSubscription]:
+        """Find all ACTIVE or TRIALING add-on subscriptions for a user.
+
+        Mirrors ``SubscriptionRepository.find_active_by_user_list`` so the
+        read model's add-on entitlement predicate matches the plan one (S69 D6).
+        """
+        return (
+            self._session.query(AddOnSubscription)
+            .filter(
+                AddOnSubscription.user_id == user_id,
+                AddOnSubscription.status.in_(
+                    [
+                        SubscriptionStatus.ACTIVE,
+                        SubscriptionStatus.TRIALING,
+                    ]
+                ),
+            )
+            .all()
+        )
+
     def find_pending_by_user(self, user_id: UUID) -> List[AddOnSubscription]:
         """Find all pending add-on subscriptions for a user."""
         return (

@@ -22,6 +22,28 @@ addon_tarif_plans = db.Table(
 )
 
 
+# S85.1 (D6): many-to-many join to the CORE tax catalog (``vbwd_tax``), mirroring
+# the S72.3 shape so add-ons carry a ``taxes`` relationship like plans /
+# products / resources. The ``tax_id`` FK uses ``ON DELETE RESTRICT`` so deleting
+# a tax assigned to an add-on is rejected by the database rather than silently
+# dropping the link; ``addon_id`` uses ``ON DELETE CASCADE``.
+addon_tax = db.Table(
+    "subscription_addon_tax",
+    db.Column(
+        "addon_id",
+        db.UUID,
+        db.ForeignKey("subscription_addon.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "tax_id",
+        db.UUID,
+        db.ForeignKey("vbwd_tax.id", ondelete="RESTRICT"),
+        primary_key=True,
+    ),
+)
+
+
 class AddOn(BaseModel):
     """
     Add-on model.
@@ -41,9 +63,9 @@ class AddOn(BaseModel):
     slug = db.Column(db.String(255), unique=True, nullable=False, index=True)
     description = db.Column(db.Text, nullable=True)
 
-    # Pricing
-    price = db.Column(db.Numeric(10, 2), nullable=False, default=0)
-    currency = db.Column(db.String(3), nullable=False, default="EUR")
+    # Pricing — S85.1 (D4/D5): the single price double (full precision, never
+    # rounded in code); the currency is the global ``default_currency`` (S84).
+    price = db.Column(db.Float, nullable=False, default=0)
     billing_period = db.Column(
         db.String(50), nullable=False, default=BillingPeriod.MONTHLY.value
     )
@@ -63,6 +85,18 @@ class AddOn(BaseModel):
         lazy="selectin",
     )
 
+    # Assigned core taxes (M2M, S85.1 / D6). Mirrors plan / product / resource.
+    taxes = db.relationship(
+        "Tax",
+        secondary=addon_tax,
+        lazy="selectin",
+    )
+
+    @property
+    def raw_price(self) -> float:
+        """The stored price as a float (the ``Priceable`` protocol member)."""
+        return float(self.price) if self.price is not None else 0.0
+
     @property
     def is_recurring(self) -> bool:
         """Check if this is a recurring add-on."""
@@ -73,20 +107,40 @@ class AddOn(BaseModel):
         """Check if this add-on is available to all users (not plan-restricted)."""
         return len(self.tarif_plans) == 0
 
+    def _serialize_taxes(self) -> list:
+        """Serialize assigned core taxes to ``{id, code, name, rate}``."""
+        taxes = getattr(self, "taxes", None) or []
+        return [
+            {
+                "id": str(tax.id),
+                "code": tax.code,
+                "name": tax.name,
+                "rate": str(tax.rate),
+            }
+            for tax in taxes
+        ]
+
     def to_dict(self) -> dict:
-        """Convert to dictionary for API response."""
+        """Convert to dictionary for API response.
+
+        S85.1 (D5): a single ``price`` double — no ``currency`` (global
+        ``default_currency``). The computed ``Price`` is assembled at the route
+        layer (S85.2), keeping the model thin.
+        """
+        taxes = self._serialize_taxes()
         return {
             "id": str(self.id),
             "name": self.name,
             "slug": self.slug,
             "description": self.description,
-            "price": str(self.price),
-            "currency": self.currency,
+            "price": self.raw_price,
             "billing_period": self.billing_period,
             "config": self.config or {},
             "is_active": self.is_active,
             "is_recurring": self.is_recurring,
             "sort_order": self.sort_order,
+            "tax_ids": [tax["id"] for tax in taxes],
+            "taxes": taxes,
             "tarif_plan_ids": [str(tp.id) for tp in self.tarif_plans],  # type: ignore[attr-defined]
             "tarif_plans": [
                 {"id": str(tp.id), "name": tp.name} for tp in self.tarif_plans  # type: ignore[attr-defined]

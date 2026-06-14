@@ -305,7 +305,7 @@ class BotStorefrontService:
             return {
                 "name": plan.name,
                 "unit_price": str(plan.price) if plan.price is not None else None,
-                "currency": plan.currency,
+                "currency": None,  # S85.1 (D5): plans price in the system default.
             }
         if item_type == ITEM_TYPE_ADD_ON:
             addon = addon_lookup(item_id)
@@ -314,7 +314,7 @@ class BotStorefrontService:
             return {
                 "name": addon.name,
                 "unit_price": str(addon.price),
-                "currency": addon.currency,
+                "currency": None,  # S85.1 (D5): add-ons price in the system default.
             }
         if item_type == ITEM_TYPE_TOKEN_BUNDLE:
             bundle = bundle_lookup(item_id)

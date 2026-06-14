@@ -67,6 +67,11 @@ class RecurringBillingSubscriber:
 
         return InvoiceRepository(db.session)
 
+    def _price_factory(self):
+        from flask import current_app
+
+        return current_app.container.price_factory()
+
     # -- subscribers ----------------------------------------------------------
 
     def on_provider_linked(self, _event_name: str, data: dict) -> None:
@@ -194,11 +199,23 @@ class RecurringBillingSubscriber:
             return existing.id
 
         plan = subscription.tarif_plan
+        # S85.2 (D8): the renewal charge is the amount the provider actually
+        # billed (from the recurring-charge webhook) — already the gross the
+        # customer paid. It stays authoritative for the recorded total; the
+        # charged gross is NOT re-derived from the plan price.
         charged_amount = Decimal(str(amount))
+        # S85.4: but the tax DISCLOSURE is still derived from the plan's Price
+        # split and reconciled to the charged gross, so the renewal invoice
+        # carries a real per-rate breakdown (net + Σtax == charged gross).
+        net_amount, tax_amount, tax_breakdown = self._renewal_tax_split(
+            plan, charged_amount
+        )
         renewal_invoice = UserInvoice(
             user_id=subscription.user_id,
             invoice_number=UserInvoice.generate_invoice_number(),
             amount=charged_amount,
+            subtotal=net_amount,
+            tax_amount=tax_amount,
             total_amount=charged_amount,
             currency=(currency or "eur").upper(),
             status=InvoiceStatus.PENDING,
@@ -217,10 +234,56 @@ class RecurringBillingSubscriber:
                 quantity=1,
                 unit_price=charged_amount,
                 total_price=charged_amount,
+                net_amount=net_amount,
+                tax_amount=tax_amount,
+                tax_breakdown=tax_breakdown,
             )
         )
         invoice_repo.save(renewal_invoice)
         return renewal_invoice.id
+
+    _CENTS = Decimal("0.01")
+
+    def _renewal_tax_split(self, plan, charged_amount):
+        """Reconcile the plan's tax split to the provider's charged gross.
+
+        Returns ``(net_amount, tax_amount, tax_breakdown)`` whose net + Σtax
+        equals ``charged_amount`` exactly. The plan's ``Price`` gives the tax
+        ratio (which rates apply, in what proportion); that ratio is applied to
+        the authoritative charged gross so a small provider/plan price drift
+        never leaves net + tax disagreeing with the recorded total. A plan with
+        no taxes (or no plan) ⇒ net == gross, empty breakdown.
+        """
+        from decimal import ROUND_HALF_UP
+
+        if plan is None:
+            return charged_amount, Decimal("0.00"), []
+
+        computed_price = self._price_factory().get_price_from_object(plan)
+        if not computed_price.taxes:
+            return charged_amount, Decimal("0.00"), []
+
+        gross = Decimal(str(computed_price.brutto))
+        if gross == 0:
+            return charged_amount, Decimal("0.00"), []
+
+        # Scale each per-rate amount by (charged_gross / plan_gross) so the
+        # split tracks the authoritative charged amount.
+        scale = charged_amount / gross
+        breakdown = []
+        tax_total = Decimal("0.00")
+        for tax in computed_price.taxes:
+            scaled = (Decimal(str(tax.amount)) * scale).quantize(
+                self._CENTS, rounding=ROUND_HALF_UP
+            )
+            breakdown.append(
+                {"code": tax.code, "rate": tax.rate, "amount": float(scaled)}
+            )
+            tax_total += scaled
+        # Net is the remainder so net + Σtax == charged gross exactly (the tax
+        # rounding residue lands in net, never breaking the invariant).
+        net_amount = charged_amount - tax_total
+        return net_amount, tax_total, breakdown
 
     def _emit(self, event) -> None:
         from flask import current_app

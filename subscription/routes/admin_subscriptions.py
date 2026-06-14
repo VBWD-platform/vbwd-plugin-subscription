@@ -172,12 +172,13 @@ def admin_create_subscription():
 
     # Create invoice. The subscription/plan link is the SUBSCRIPTION line item
     # (item_id == subscription.id), not a column on the invoice.
-    amount = plan.price or plan.price_float or 0
+    amount = plan.raw_price
     invoice = UserInvoice()
     invoice.user_id = user.id
     invoice.invoice_number = UserInvoice.generate_invoice_number()
     invoice.amount = amount
-    invoice.currency = plan.currency or "EUR"
+    # S85.1 (D5): the plan no longer carries a currency; the invoice keeps the
+    # model default (the global operating currency, S84).
     invoice.status = InvoiceStatus.PENDING
     invoice.invoiced_at = utcnow()
     invoice.expires_at = utcnow() + timedelta(days=30)
@@ -450,6 +451,19 @@ def admin_cancel_subscription(subscription_id):
             return jsonify({"error": result.error}), 404
         return jsonify({"error": result.error}), 400
 
+    # S69 D5: the admin cancel path used to emit no event, so permissions never
+    # reconciled. Publish the lifecycle fact so the permission-sync consumer runs.
+    from plugins.subscription.subscription.services.lifecycle_events import (
+        EVENT_SUBSCRIPTION_CANCELLED,
+        publish_subscription_event,
+    )
+
+    publish_subscription_event(
+        EVENT_SUBSCRIPTION_CANCELLED,
+        result.subscription,
+        result.subscription.user_id,
+    )
+
     return (
         jsonify(
             {
@@ -503,6 +517,19 @@ def admin_activate_subscription(subscription_id):
         if "not found" in result.error.lower():
             return jsonify({"error": result.error}), 404
         return jsonify({"error": result.error}), 400
+
+    # S69 D5: the admin activate path used to emit no event. Publish the
+    # lifecycle fact so the permission-sync consumer grants plan permissions.
+    from plugins.subscription.subscription.services.lifecycle_events import (
+        EVENT_SUBSCRIPTION_ACTIVATED,
+        publish_subscription_event,
+    )
+
+    publish_subscription_event(
+        EVENT_SUBSCRIPTION_ACTIVATED,
+        result.subscription,
+        result.subscription.user_id,
+    )
 
     return (
         jsonify(

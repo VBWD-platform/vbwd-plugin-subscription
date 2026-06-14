@@ -133,8 +133,7 @@ def admin_create_addon():
             name=data["name"],
             slug=slug,
             description=data.get("description"),
-            price=price,
-            currency=data.get("currency", "EUR"),
+            price=float(price),
             billing_period=data.get("billing_period", "monthly"),
             config=data.get("config", {}),
             is_active=data.get("is_active", True),
@@ -260,12 +259,9 @@ def admin_update_addon(addon_id):
             price = Decimal(str(data["price"]))
             if price < 0:
                 return jsonify({"error": "Price cannot be negative"}), 400
-            addon.price = price
+            addon.price = float(price)
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid price"}), 400
-
-    if "currency" in data:
-        addon.currency = data["currency"]
 
     if "billing_period" in data:
         addon.billing_period = data["billing_period"]

@@ -52,8 +52,7 @@ class TestPlansRoundTrip:
                 slug=slug,
                 name="Gold",
                 description="Gold plan",
-                price_float=19.0,
-                currency="EUR",
+                price=19.0,
                 billing_period=BillingPeriod.MONTHLY,
                 trial_days=7,
             )
@@ -110,7 +109,7 @@ class TestSubscriptionsExportOnly:
         plan = TarifPlan(
             slug=f"sp-{uuid.uuid4().hex[:8]}",
             name="P",
-            price_float=1.0,
+            price=1.0,
             billing_period=BillingPeriod.MONTHLY,
         )
         user = User(
@@ -160,7 +159,7 @@ class TestCsvExport:
             TarifPlan(
                 slug=slug,
                 name="Gold",
-                price_float=19.0,
+                price=19.0,
                 billing_period=BillingPeriod.MONTHLY,
             )
         )

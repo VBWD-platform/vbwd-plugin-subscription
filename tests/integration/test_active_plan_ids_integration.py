@@ -37,7 +37,7 @@ def _plan(db, slug: str) -> TarifPlan:
         name=slug,
         slug=slug,
         description="plan",
-        price_float=9.99,
+        price=9.99,
         billing_period=BillingPeriod.MONTHLY,
         is_active=True,
         sort_order=0,

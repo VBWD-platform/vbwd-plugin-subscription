@@ -29,8 +29,6 @@ def test_expire_trials_links_invoice_via_subscription_line_item(db):
         name="Trial Plan",
         slug=f"trial-plan-{uuid4().hex}",
         price=12.50,
-        price_float=12.50,
-        currency="EUR",
         is_active=True,
         billing_period=BillingPeriod.MONTHLY,
     )

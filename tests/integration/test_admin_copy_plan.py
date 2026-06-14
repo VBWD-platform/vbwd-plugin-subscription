@@ -32,7 +32,6 @@ def _make_plan(db, *, name):
         id=uuid4(),
         name=name,
         slug=f"{name.lower()}-{uuid4().hex[:8]}",
-        price_float=100.0,
         price=Decimal("100.00"),
         billing_period=BillingPeriod.MONTHLY,
         is_active=True,

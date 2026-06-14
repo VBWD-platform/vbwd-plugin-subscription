@@ -19,7 +19,6 @@ These tests pin the fix at two layers:
 from decimal import Decimal
 from uuid import uuid4
 
-from vbwd.models.currency import Currency
 from vbwd.models.enums import BillingPeriod
 from plugins.subscription.subscription.models.tarif_plan import TarifPlan
 
@@ -30,9 +29,7 @@ def _make_plan(db, slug="detail-pricing-plan", price="29.99"):
         name="Detail Pricing Plan",
         slug=slug,
         description="Regression plan for the detail-route 400 bug",
-        price_float=float(price),
         price=Decimal(price),
-        currency="EUR",
         billing_period=BillingPeriod.MONTHLY,
         is_active=True,
         sort_order=0,
@@ -42,25 +39,12 @@ def _make_plan(db, slug="detail-pricing-plan", price="29.99"):
     return plan
 
 
-def _seed_eur(db):
-    currency = Currency(
-        id=uuid4(),
-        code="EUR",
-        name="Euro",
-        symbol="€",
-        exchange_rate=Decimal("1.0"),
-        is_default=True,
-        is_active=True,
-        decimal_places=2,
-    )
-    db.session.add(currency)
-    db.session.commit()
-    return currency
+def test_detail_route_returns_200_with_base_price(db, client):
+    """The exact load-test path: a real slug, no query params → must NOT 400.
 
-
-def test_detail_route_returns_200_with_no_currency_seeded(db, client):
-    """The exact load-test path: a real slug, no query params, and a DB with
-    no currency row → must NOT 400. It degrades to 200 with the base price."""
+    The detail route always returns 200 carrying the base ``price`` (the
+    regression this pins: it never 400s the way the original bug did).
+    """
     plan = _make_plan(db)
 
     response = client.get(f"/api/v1/tarif-plans/{plan.slug}")
@@ -68,14 +52,18 @@ def test_detail_route_returns_200_with_no_currency_seeded(db, client):
     assert response.status_code == 200, response.get_json()
     body = response.get_json()
     assert body["slug"] == plan.slug
-    assert body["price_float"] == 29.99
+    assert body["price"] == 29.99
 
 
 def test_detail_route_returns_200_with_eur_seeded(db, client):
     """With the baseline EUR currency present, the detail route returns a
-    priced body."""
+    priced body.
+
+    The baseline EUR row is seeded by the integration ``db`` fixture (S85.2:
+    the ``PriceFactory`` resolves the default currency from the catalog), so
+    this test does not re-seed it.
+    """
     plan = _make_plan(db)
-    _seed_eur(db)
 
     response = client.get(f"/api/v1/tarif-plans/{plan.slug}")
 
@@ -87,9 +75,11 @@ def test_detail_route_returns_200_with_eur_seeded(db, client):
 
 def test_detail_route_returns_200_for_unknown_currency_param(db, client):
     """A currency the DB does not know (?currency=USD with only EUR seeded)
-    must degrade gracefully to 200, never 400."""
+    must degrade gracefully to 200, never 400.
+
+    Only EUR is present (seeded by the integration ``db`` fixture).
+    """
     plan = _make_plan(db)
-    _seed_eur(db)
 
     response = client.get(f"/api/v1/tarif-plans/{plan.slug}?currency=USD")
 
@@ -114,17 +104,22 @@ def test_every_listed_slug_returns_200_from_detail(db, client):
 
 
 def test_populate_db_seeds_baseline_eur_currency(db):
-    """``flask seed all`` (subscription populate_db) must create the baseline
-    EUR currency through the repository so the seeded DB resolves pricing.
+    """``flask seed all`` (subscription populate_db) keeps the baseline EUR
+    currency present through the repository so the seeded DB resolves pricing.
 
-    Idempotent: re-running creates nothing new.
+    Idempotent: with the baseline EUR already present (seeded by the
+    integration ``db`` fixture, S85.2), ``seed_baseline_currency`` is a no-op
+    and reports ``False`` on every call while EUR stays resolvable.
     """
     from plugins.subscription.populate_db import seed_baseline_currency
     from vbwd.repositories.currency_repository import CurrencyRepository
 
-    assert seed_baseline_currency() is True
+    assert seed_baseline_currency() is False
     assert seed_baseline_currency() is False
 
     eur = CurrencyRepository(db.session).find_by_code("EUR")
     assert eur is not None
-    assert eur.is_default is True
+    # S84: the default lives in the core settings JSON, not on a column.
+    from vbwd.services.core_settings_store import get_core_settings
+
+    assert get_core_settings()["default_currency"] == "EUR"

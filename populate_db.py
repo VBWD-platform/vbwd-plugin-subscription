@@ -40,11 +40,14 @@ def seed_baseline_currency():
             name="Euro",
             symbol="€",
             exchange_rate=Decimal("1.0"),
-            is_default=True,
-            is_active=True,
             decimal_places=2,
         )
     )
+    # S84: the active set + default live in the core settings JSON (single
+    # source of truth), not on the dropped ``is_active``/``is_default`` columns.
+    from vbwd.services.core_settings_store import update_core_settings
+
+    update_core_settings({"default_currency": "EUR", "active_currencies": ["EUR"]})
     logger.info("[subscription] Created baseline currency: EUR")
     return True
 
@@ -132,9 +135,7 @@ def populate(app=None):
                 name=plan_data["name"],
                 slug=plan_data["slug"],
                 description=plan_data["description"],
-                price_float=plan_data["price_float"],
                 price=plan_data["price_float"],
-                currency="EUR",
                 billing_period=BillingPeriod(plan_data["billing_period"]),
                 features=plan_data["features"],
                 trial_days=plan_data["trial_days"],

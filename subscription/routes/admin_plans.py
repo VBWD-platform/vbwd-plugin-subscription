@@ -12,11 +12,43 @@ from plugins.subscription.subscription.repositories.subscription_repository impo
     SubscriptionRepository,
 )
 from vbwd.extensions import db
+from vbwd.models.tax import Tax
 from plugins.subscription.subscription.models import TarifPlan
 from plugins.subscription.subscription.models import Subscription
+from plugins.subscription.subscription.models.tarif_plan import (
+    validate_price_display_mode,
+)
 from vbwd.models.enums import SubscriptionStatus
 from plugins.subscription.subscription.cache_keys import invalidate_plan_cache
 from plugins.subscription.subscription.routes import subscription_bp
+
+
+class TaxAssignmentError(ValueError):
+    """Raised when a requested ``tax_ids`` entry is unknown or inactive."""
+
+
+def _resolve_active_taxes(tax_ids):
+    """Resolve ``tax_ids`` to active core taxes, deduped and order-preserving.
+
+    Raises ``TaxAssignmentError`` if any id is unknown or its tax is inactive.
+    """
+    deduped = list(dict.fromkeys(tax_ids))
+    if not deduped:
+        return []
+
+    found = {
+        str(tax.id): tax
+        for tax in db.session.query(Tax).filter(Tax.id.in_(deduped)).all()
+    }
+    resolved = []
+    for tax_id in deduped:
+        tax = found.get(str(tax_id))
+        if tax is None:
+            raise TaxAssignmentError(f"Unknown tax: {tax_id}")
+        if not tax.is_active:
+            raise TaxAssignmentError(f"Tax is not active: {tax_id}")
+        resolved.append(tax)
+    return resolved
 
 
 @subscription_bp.route("/api/v1/admin/tarif-plans/", methods=["GET"])
@@ -115,14 +147,18 @@ def admin_create_plan():
             name=data["name"],
             slug=slug,
             description=data.get("description", ""),
-            price=price_decimal,
-            price_float=float(price_decimal),
-            currency=data.get("currency", "EUR"),
+            price=float(price_decimal),
             billing_period=data.get("billing_period", "MONTHLY").upper(),
             features=features,
             trial_days=int(data.get("trial_days", 0)),
             is_active=data.get("is_active", True),
+            price_display_mode=validate_price_display_mode(
+                data.get("price_display_mode")
+            ),
         )
+
+        if "tax_ids" in data:
+            plan.taxes = _resolve_active_taxes(data["tax_ids"])
 
         plan_repo = TarifPlanRepository(db.session)
         saved_plan = plan_repo.save(plan)
@@ -200,10 +236,7 @@ def admin_update_plan(plan_id):
     if "description" in data:
         plan.description = data["description"]
     if "price" in data:
-        plan.price = Decimal(str(data["price"]))
-        plan.price_float = float(data["price"])
-    if "currency" in data:
-        plan.currency = data["currency"]
+        plan.price = float(data["price"])
     if "billing_period" in data:
         plan.billing_period = data["billing_period"]
     if "features" in data:
@@ -215,6 +248,19 @@ def admin_update_plan(plan_id):
         plan.is_active = data["is_active"]
     if "trial_days" in data:
         plan.trial_days = int(data["trial_days"])
+    if "price_display_mode" in data:
+        try:
+            plan.price_display_mode = validate_price_display_mode(
+                data["price_display_mode"]
+            )
+        except ValueError as mode_error:
+            return jsonify({"error": str(mode_error)}), 400
+    if "tax_ids" in data:
+        # Replace-set: the new assignment fully supersedes the old one.
+        try:
+            plan.taxes = _resolve_active_taxes(data["tax_ids"])
+        except TaxAssignmentError as tax_error:
+            return jsonify({"error": str(tax_error)}), 400
 
     saved_plan = plan_repo.save(plan)
     invalidate_plan_cache()
@@ -363,8 +409,6 @@ def admin_copy_plan(plan_id):
         slug=new_slug,
         description=source_plan.description,
         price=source_plan.price,
-        price_float=source_plan.price_float,
-        currency=source_plan.currency,
         billing_period=source_plan.billing_period,
         features=source_plan.features,
         trial_days=source_plan.trial_days,

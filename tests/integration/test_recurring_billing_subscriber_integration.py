@@ -35,8 +35,6 @@ def _subscription_with_provider_ref(db, provider_ref_id):
         name="Pro Plan",
         slug=f"pro-{uuid4().hex}",
         price=9.99,
-        price_float=9.99,
-        currency="EUR",
         is_active=True,
         billing_period=BillingPeriod.MONTHLY,
     )

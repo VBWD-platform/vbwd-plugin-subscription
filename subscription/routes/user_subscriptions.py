@@ -1,7 +1,8 @@
 """User subscription routes."""
-from flask import jsonify, g, request
+from flask import jsonify, g, request, current_app
 from vbwd.extensions import db
 from vbwd.middleware.auth import require_auth
+from vbwd.pricing.display_mode import display_mode_fields
 from plugins.subscription.subscription.repositories.subscription_repository import (
     SubscriptionRepository,
 )
@@ -13,6 +14,32 @@ from plugins.subscription.subscription.services.subscription_service import (
 )
 from vbwd.utils.validation import parse_uuid
 from plugins.subscription.subscription.routes import subscription_bp
+
+
+def _plan_summary_with_pricing(plan, price_factory) -> dict:
+    """Build the dashboard ``subscription.plan`` summary with the price split.
+
+    Routes the price math through the single core ``PriceFactory`` (D1) so the
+    dashboard subscription-details view gets the computed net/gross + per-tax
+    breakdown and the display-mode pair (S85.4) — instead of the bare gross
+    ``price``. Backward-compatible: the existing ``price`` field stays.
+    """
+    price = price_factory.get_price_from_object(plan)
+    summary = {
+        "id": str(plan.id),
+        "name": plan.name,
+        "slug": plan.slug,
+        "price": float(plan.price) if plan.price else 0,
+        "billing_period": plan.billing_period.value
+        if plan.billing_period
+        else "monthly",
+        "net_price": price.netto,
+        "gross_price": price.brutto,
+        "currency": price.currency,
+        "price_obj": price.to_dict(),
+    }
+    summary.update(display_mode_fields(plan))
+    return summary
 
 
 @subscription_bp.route("/api/v1/user/subscriptions", methods=["GET"])
@@ -100,19 +127,14 @@ def get_active_subscription():
     # Build response with plan details
     subscription_data = subscription.to_dict()
 
-    # Add plan details if available
+    # Add plan details if available — enriched with the computed net/gross split
+    # + display-mode pair via the single core PriceFactory (S85.4) so the
+    # dashboard subscription-details view applies the business overlay + tax UI.
     if subscription.tarif_plan_id:
         plan = tarif_plan_repo.find_by_id(subscription.tarif_plan_id)
         if plan:
-            subscription_data["plan"] = {
-                "id": str(plan.id),
-                "name": plan.name,
-                "slug": plan.slug,
-                "price": float(plan.price) if plan.price else 0,
-                "billing_period": plan.billing_period.value
-                if plan.billing_period
-                else "monthly",
-            }
+            price_factory = current_app.container.price_factory()
+            subscription_data["plan"] = _plan_summary_with_pricing(plan, price_factory)
 
     # Add pending plan details if available
     if subscription.pending_plan_id:

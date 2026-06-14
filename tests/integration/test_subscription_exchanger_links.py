@@ -164,8 +164,7 @@ class TestPlanCategoryLink:
             slug=plan_slug,
             name="Gold",
             description="Gold",
-            price_float=19.0,
-            currency="EUR",
+            price=19.0,
             billing_period=BillingPeriod.MONTHLY,
             trial_days=7,
             features=["a", "b"],
@@ -213,8 +212,7 @@ class TestPlanCategoryLink:
             {
                 "slug": plan_slug,
                 "name": "Gold",
-                "price_float": 19.0,
-                "currency": "EUR",
+                "price": 19.0,
                 "billing_period": BillingPeriod.MONTHLY.value,
                 "trial_days": 0,
                 "is_active": True,
@@ -237,8 +235,7 @@ class TestAddonPlanLink:
         plan = TarifPlan(
             slug=plan_slug,
             name="Gold",
-            price_float=19.0,
-            currency="EUR",
+            price=19.0,
             billing_period=BillingPeriod.MONTHLY,
         )
         addon = AddOn(slug=addon_slug, name="Extra", price=5)
@@ -281,7 +278,6 @@ class TestAddonPlanLink:
                 "slug": addon_slug,
                 "name": "Extra",
                 "price": 5,
-                "currency": "EUR",
                 "billing_period": BillingPeriod.MONTHLY.value,
                 "config": {},
                 "is_active": True,
@@ -306,8 +302,7 @@ class TestFullGraphRoundTrip:
         plan = TarifPlan(
             slug=plan_slug,
             name="Gold",
-            price_float=29.0,
-            currency="EUR",
+            price=29.0,
             billing_period=BillingPeriod.MONTHLY,
             trial_days=14,
             features=["x"],
@@ -367,7 +362,7 @@ class TestFullGraphRoundTrip:
         addon_back = db.session.query(AddOn).filter(AddOn.slug == addon_slug).first()
         assert plan_back is not None
         assert plan_back.trial_days == 14
-        assert float(plan_back.price_float) == 29.0
+        assert float(plan_back.price) == 29.0
         assert plan_back.billing_period == BillingPeriod.MONTHLY
         assert [c.slug for c in plan_back.categories] == [category_slug]
         assert addon_back is not None
@@ -401,8 +396,7 @@ class TestDryRun:
             {
                 "slug": plan_slug,
                 "name": "Gold",
-                "price_float": 19.0,
-                "currency": "EUR",
+                "price": 19.0,
                 "billing_period": BillingPeriod.MONTHLY.value,
                 "trial_days": 0,
                 "is_active": True,

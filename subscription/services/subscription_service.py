@@ -11,6 +11,11 @@ from plugins.subscription.subscription.repositories.tarif_plan_repository import
     TarifPlanRepository,
 )
 from plugins.subscription.subscription.models import Subscription
+from plugins.subscription.subscription.services.lifecycle_events import (
+    EVENT_SUBSCRIPTION_CANCELLED,
+    EVENT_SUBSCRIPTION_EXPIRED,
+    publish_subscription_event,
+)
 from vbwd.models.invoice import UserInvoice
 from vbwd.models.invoice_line_item import InvoiceLineItem
 from vbwd.models.enums import (
@@ -323,6 +328,10 @@ class SubscriptionService:
         """
         return self._subscription_repo.find_expiring_soon(days)
 
+    def _publish_lifecycle_event(self, event_name: str, subscription) -> None:
+        """Publish a subscription lifecycle event for ``subscription`` (S69 D5)."""
+        publish_subscription_event(event_name, subscription, subscription.user_id)
+
     def expire_subscriptions(self) -> List[Subscription]:
         """
         Find and mark expired subscriptions.
@@ -335,6 +344,10 @@ class SubscriptionService:
         for subscription in expired:
             subscription.expire()
             self._subscription_repo.save(subscription)
+            # S69 D5: the scheduler expiry path emitted no event, so permissions
+            # never reconciled on expiry. Emit expired (treated as a cancel by
+            # the permission-sync consumer).
+            self._publish_lifecycle_event(EVENT_SUBSCRIPTION_EXPIRED, subscription)
 
         return expired
 
@@ -355,13 +368,17 @@ class SubscriptionService:
             subscription.cancel()
             self._subscription_repo.save(subscription)
 
+            # S69 D5: emit so the trial→cancel scheduler path reconciles perms.
+            self._publish_lifecycle_event(EVENT_SUBSCRIPTION_CANCELLED, subscription)
+
             plan = subscription.tarif_plan
-            amount = plan.price or plan.price_float or 0
+            amount = plan.raw_price
             invoice = UserInvoice()
             invoice.user_id = subscription.user_id
             invoice.invoice_number = UserInvoice.generate_invoice_number()
             invoice.amount = amount
-            invoice.currency = plan.currency or "EUR"
+            # S85.1 (D5): the plan no longer carries a currency; the invoice
+            # keeps the model default (the global operating currency, S84).
             invoice.status = InvoiceStatus.PENDING
             invoice.invoiced_at = utcnow()
             invoice.expires_at = utcnow() + timedelta(days=30)

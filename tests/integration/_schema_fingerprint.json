@@ -13,10 +13,6 @@
         "nullable": false,
         "type": "TIMESTAMP"
       },
-      "currency": {
-        "nullable": false,
-        "type": "VARCHAR(3)"
-      },
       "description": {
         "nullable": true,
         "type": "TEXT"
@@ -35,7 +31,7 @@
       },
       "price": {
         "nullable": false,
-        "type": "NUMERIC(10, 2)"
+        "type": "DOUBLE PRECISION"
       },
       "slug": {
         "nullable": false,
@@ -298,10 +294,6 @@
         "nullable": false,
         "type": "TIMESTAMP"
       },
-      "currency": {
-        "nullable": true,
-        "type": "VARCHAR(3)"
-      },
       "description": {
         "nullable": true,
         "type": "TEXT"
@@ -324,15 +316,11 @@
       },
       "price": {
         "nullable": true,
-        "type": "NUMERIC(10, 2)"
-      },
-      "price_float": {
-        "nullable": false,
         "type": "DOUBLE PRECISION"
       },
-      "price_id": {
+      "price_display_mode": {
         "nullable": true,
-        "type": "UUID"
+        "type": "VARCHAR(8)"
       },
       "slug": {
         "nullable": false,
@@ -355,17 +343,7 @@
         "type": "INTEGER"
       }
     },
-    "foreign_keys": [
-      [
-        [
-          "price_id"
-        ],
-        "vbwd_price",
-        [
-          "id"
-        ]
-      ]
-    ],
+    "foreign_keys": [],
     "primary_key": [
       "id"
     ]

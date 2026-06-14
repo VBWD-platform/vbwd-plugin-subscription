@@ -100,6 +100,43 @@ class SubscriptionReadModel:
         }
         return list(unique_plan_ids)
 
+    def active_addon_ids(self, user_id: UUID) -> List[UUID]:
+        """Return the distinct add-on ids the user is actively entitled to.
+
+        Active means an add-on subscription in ACTIVE or TRIALING status (S69
+        D6). Mirrors ``active_plan_ids``; data access stays in the repository.
+        """
+        active_addon_subscriptions = (
+            self._addon_subscription_repo().find_active_by_user_list(user_id)
+        )
+        unique_addon_ids = {
+            addon_subscription.addon_id
+            for addon_subscription in active_addon_subscriptions
+        }
+        return list(unique_addon_ids)
+
+    def all_plan_ids(self, user_id: UUID) -> List[UUID]:
+        """Return the distinct plan ids across ALL the user's subscriptions
+        (any status). Used by group reconcile (S73) to keep a group "managed"
+        while any source — even cancelled — references it, so the last source's
+        cancellation still removes the managed membership."""
+        unique_plan_ids = {
+            subscription.tarif_plan_id
+            for subscription in self._subscription_repo().find_by_user(user_id)
+        }
+        return list(unique_plan_ids)
+
+    def all_addon_ids(self, user_id: UUID) -> List[UUID]:
+        """Return the distinct add-on ids across ALL the user's add-on
+        subscriptions (any status). Mirrors ``all_plan_ids`` for S73 reconcile."""
+        unique_addon_ids = {
+            addon_subscription.addon_id
+            for addon_subscription in self._addon_subscription_repo().find_by_user(
+                user_id
+            )
+        }
+        return list(unique_addon_ids)
+
     def count_user_subscriptions(self, user_id: UUID) -> int:
         return len(self._subscription_repo().find_by_user(user_id))
 

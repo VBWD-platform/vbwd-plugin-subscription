@@ -8,6 +8,12 @@ unchanged (E2); core no longer imports subscription models.
 import os
 from datetime import datetime, timedelta, timezone
 
+from plugins.subscription.subscription.cache_keys import (
+    invalidate_addon_cache,
+    invalidate_plan_cache,
+)
+from vbwd.services.demo_tax_linker import link_demo_tax
+
 TEST_DATA_MARKER = "TEST_DATA_"
 TEST_PLAN_SLUG = "test-data-basic-plan"
 
@@ -57,6 +63,16 @@ DEMO_PLANS = [
 # `find_by_linked_plan_slug`.
 USER_ACCESS_LEVEL_PLAN_SLUGS = ["basic", "pro"]
 
+# Public pricing page (/tarifs) hosts the NativePricingPlans widget configured
+# with category="root", which calls GET /tarif-plans?category=root. That route
+# returns the plans linked to the tarif category with this slug. We seed it and
+# link exactly this seeder's demo plans (sourced from DEMO_PLANS — DRY, no
+# second copy of the slugs); GHRM packages are seeded by the ghrm plugin and
+# stay out of the subscription pricing page.
+ROOT_CATEGORY_SLUG = "root"
+ROOT_CATEGORY_NAME = "Plans"
+ROOT_CATEGORY_PLAN_SLUGS = [plan["slug"] for plan in DEMO_PLANS]
+
 DEMO_ADDONS = [
     {
         "name": "Priority Support",
@@ -84,42 +100,89 @@ DEMO_ADDONS = [
 
 
 def seed_catalog(session) -> None:
-    """Insert demo plans + addons (core demo seeder delegates here)."""
+    """Upsert demo plans + addons (core demo seeder delegates here).
+
+    Idempotent by slug: a re-run (or a run where another plugin's seeder, e.g.
+    ghrm, already created a plan with the same slug) updates in place instead of
+    inserting a duplicate. This is the demo-data registry contract — every hook
+    must be a safe idempotent upsert regardless of order (S88).
+    """
     from plugins.subscription.subscription.models import TarifPlan, AddOn
     from vbwd.models.enums import BillingPeriod
 
+    plans_by_slug = {}
     for plan_data in DEMO_PLANS:
-        session.add(
-            TarifPlan(
-                name=plan_data["name"],
-                slug=plan_data["slug"],
-                description=plan_data["description"],
-                price_float=plan_data["price_float"],
-                price=plan_data["price"],
-                currency=plan_data["currency"],
-                billing_period=BillingPeriod(plan_data["billing_period"]),
-                is_active=plan_data["is_active"],
-                sort_order=plan_data["sort_order"],
-                features=plan_data["features"],
-            )
-        )
+        plan = session.query(TarifPlan).filter_by(slug=plan_data["slug"]).first()
+        if plan is None:
+            plan = TarifPlan(slug=plan_data["slug"])
+            session.add(plan)
+        plan.name = plan_data["name"]
+        plan.description = plan_data["description"]
+        plan.price = plan_data["price"]
+        plan.billing_period = BillingPeriod(plan_data["billing_period"])
+        plan.is_active = plan_data["is_active"]
+        plan.sort_order = plan_data["sort_order"]
+        plan.features = plan_data["features"]
+        plans_by_slug[plan_data["slug"]] = plan
 
+    addons = []
     for addon_data in DEMO_ADDONS:
-        session.add(
-            AddOn(
-                name=addon_data["name"],
-                slug=addon_data["slug"],
-                description=addon_data["description"],
-                price=addon_data["price"],
-                currency=addon_data["currency"],
-                billing_period=addon_data["billing_period"],
-                is_active=addon_data["is_active"],
-                sort_order=addon_data["sort_order"],
-                config=addon_data["config"],
-            )
-        )
+        addon = session.query(AddOn).filter_by(slug=addon_data["slug"]).first()
+        if addon is None:
+            addon = AddOn(slug=addon_data["slug"])
+            session.add(addon)
+        addon.name = addon_data["name"]
+        addon.description = addon_data["description"]
+        addon.price = addon_data["price"]
+        addon.billing_period = addon_data["billing_period"]
+        addon.is_active = addon_data["is_active"]
+        addon.sort_order = addon_data["sort_order"]
+        addon.config = addon_data["config"]
+        addons.append(addon)
 
+    session.flush()
+    seed_root_category(session, plans_by_slug)
     seed_user_access_levels(session)
+
+    # Link the canonical demo VAT to every plan + addon (S85.4) so the price
+    # disclosure shows gross > net. Idempotent (re-run does not double-link);
+    # the tax is resolved by code through the core linker, no cross-plugin
+    # import. No-op when the canonical VAT is absent (taxes not seeded).
+    link_demo_tax(session, list(plans_by_slug.values()))
+    link_demo_tax(session, addons)
+
+    # A fresh reset-demo must be immediately consistent: clear the TTL-cached
+    # public catalog so /tarif-plans* and /addons/ serve the reseeded rows
+    # right away instead of a stale body (degrades to a no-op without Redis).
+    invalidate_plan_cache()
+    invalidate_addon_cache()
+
+
+def seed_root_category(session, plans_by_slug) -> None:
+    """Idempotently upsert the ``root`` tarif category and link the demo plans.
+
+    The public pricing page (/tarifs) lists plans via
+    ``GET /tarif-plans?category=root``. Linking is idempotent: a plan already
+    in the category is not added a second time. Only this seeder's demo plans
+    are linked — GHRM packages stay out of the subscription pricing page.
+    """
+    from plugins.subscription.subscription.models import TarifPlanCategory
+
+    category = (
+        session.query(TarifPlanCategory).filter_by(slug=ROOT_CATEGORY_SLUG).first()
+    )
+    if category is None:
+        category = TarifPlanCategory(slug=ROOT_CATEGORY_SLUG)
+        session.add(category)
+    category.name = ROOT_CATEGORY_NAME
+
+    linked_ids = {plan.id for plan in category.tarif_plans}
+    for plan_slug in ROOT_CATEGORY_PLAN_SLUGS:
+        plan = plans_by_slug.get(plan_slug)
+        if plan is not None and plan.id not in linked_ids:
+            category.tarif_plans.append(plan)
+
+    session.flush()
 
 
 def seed_user_access_levels(session) -> int:
@@ -172,9 +235,7 @@ def seed_test_data(session, test_user) -> None:
             name=f"{TEST_DATA_MARKER}Basic Plan",
             slug=TEST_PLAN_SLUG,
             description="Test plan for integration tests",
-            price_float=9.99,
             price=9.99,
-            currency="EUR",
             is_active=True,
             billing_period=BillingPeriod.MONTHLY,
             features={"api_calls": 1000, "storage_gb": 5},

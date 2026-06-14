@@ -310,6 +310,25 @@ class SubscriptionPlugin(BasePlugin):
 
         self._register_data_exchangers()
 
+        # S77 — make plans and add-ons addressable by the generic tags /
+        # custom-fields framework. Registering these entity types lets the core
+        # value endpoints (GET|PUT /admin/<type>/<id>/{tags,custom-fields})
+        # return 200 (each gated by its own manage permission) instead of 404.
+        from vbwd.services.entity_type_registry import (
+            EntityTypeRegistration,
+            register_entity_type,
+        )
+
+        register_entity_type(
+            EntityTypeRegistration(
+                "tarif_plan", "Tarif plan", "subscription.plans.manage"
+            )
+        )
+        register_entity_type(
+            EntityTypeRegistration("addon", "Add-on", "subscription.addons.manage")
+        )
+        logger.info("[subscription] Entity types registered (tarif_plan, addon)")
+
         from vbwd.services.demo_data_registry import (
             register_catalog_seeder,
             register_test_data_seeder,
@@ -378,6 +397,11 @@ class SubscriptionPlugin(BasePlugin):
             unregister_deletion_dependency_provider,
         )
 
+        from vbwd.services.entity_type_registry import unregister_entity_type
+
+        unregister_entity_type("tarif_plan")
+        unregister_entity_type("addon")
+
         clear_entitlement_provider()
         unregister_invoice_extra_fields_provider("subscription")
         clear_demo_data_hooks()
@@ -441,6 +465,56 @@ class SubscriptionPlugin(BasePlugin):
         except Exception as error:
             logger.warning(
                 "[subscription] Failed to register access level handlers: %s",
+                error,
+            )
+
+        # S69 — plan/add-on driven permission reconciliation. Every lifecycle
+        # fact (activate/cancel/expire for subscriptions and add-ons) triggers a
+        # full reconcile of the user's permissions from their active sources.
+        try:
+            from plugins.subscription.subscription.handlers.permission_sync_handler import (  # noqa: E501
+                PermissionSyncHandler,
+            )
+
+            permission_sync_handler = PermissionSyncHandler()
+            for event_name in (
+                "subscription.activated",
+                "subscription.cancelled",
+                "subscription.expired",
+                "addon.activated",
+                "addon.cancelled",
+            ):
+                event_bus.subscribe(
+                    event_name, permission_sync_handler.on_lifecycle_event
+                )
+            logger.info("[subscription] Permission-sync handlers registered")
+        except Exception as error:
+            logger.warning(
+                "[subscription] Failed to register permission-sync handlers: %s",
+                error,
+            )
+
+        # S73 — plan/add-on driven user-group reconciliation. Every lifecycle
+        # fact triggers a full reconcile of the user's MANAGED group
+        # memberships from their active sources' check-in/check-out config.
+        try:
+            from plugins.subscription.subscription.handlers.group_sync_handler import (  # noqa: E501
+                GroupSyncHandler,
+            )
+
+            group_sync_handler = GroupSyncHandler()
+            for event_name in (
+                "subscription.activated",
+                "subscription.cancelled",
+                "subscription.expired",
+                "addon.activated",
+                "addon.cancelled",
+            ):
+                event_bus.subscribe(event_name, group_sync_handler.on_lifecycle_event)
+            logger.info("[subscription] Group-sync handlers registered")
+        except Exception as error:
+            logger.warning(
+                "[subscription] Failed to register group-sync handlers: %s",
                 error,
             )
 
