@@ -55,35 +55,21 @@ def app():
     flask_app = create_app(test_config)
     _ensure_subscription_enabled(flask_app)
 
-    # Build the full schema exactly ONCE for the whole session. A per-test
-    # create_all()/drop_all() (the old approach) churns DDL on db.metadata,
-    # whose table set differs per test file (each file imports a different
-    # model subset). That stranded ENUM types (duplicate "userstatus"),
-    # dropped shared tables another file needs, and deadlocked under the
-    # concurrent DDL — so the whole suite could not run together. We instead
-    # reset the public schema once (clearing any table or ENUM left by a prior
-    # crashed run) and create_all() once; each test then isolates by
-    # TRUNCATE-ing data, not by dropping the schema (mirrors plugins/cms).
+    # Build the full schema exactly ONCE for the whole session, resetting the
+    # public schema first (clearing any table or ENUM type left by a prior
+    # crashed run or a sibling suite sharing this ``*_test`` DB). A per-test
+    # create_all()/drop_all() strands standalone PG ENUM types and races other
+    # suites on the shared catalog — see vbwd/testing/integration_db.py. Each
+    # test then isolates by TRUNCATE-ing data, not by dropping the schema.
     with flask_app.app_context():
-        from sqlalchemy import text
-
         from vbwd.extensions import db as _db
+        from vbwd.testing.integration_db import reset_schema_and_create_all
 
         # Importing the package registers TarifPlan, Subscription, AddOn etc.
         # so the one-time create_all() builds the full subscription table set.
         import plugins.subscription.subscription.models  # noqa: F401
 
-        # Reset the schema and create every table on the SAME fresh connection,
-        # so create_all()'s checkfirst reflection sees the just-cleared catalog
-        # (a separate pooled connection can carry a pre-DROP snapshot). Close
-        # any session first so no idle transaction holds a lock against DROP.
-        _db.session.remove()
-        with _db.engine.connect() as connection:
-            connection.execute(text("DROP SCHEMA public CASCADE"))
-            connection.execute(text("CREATE SCHEMA public"))
-            connection.commit()
-            _db.metadata.create_all(bind=connection)
-            connection.commit()
+        reset_schema_and_create_all(_db)
 
     yield flask_app
 
@@ -132,36 +118,15 @@ def _ensure_subscription_enabled(flask_app) -> None:
 def db(app):
     """Isolate each test by TRUNCATE-ing data (not dropping the schema).
 
-    The schema is built once per session in the ``app`` fixture. Here we clear
-    data between tests by reflecting the tables that actually exist and
-    truncating them all in one statement on a dedicated short-lived connection
-    (``engine.begin()``) — not on ``db.session``, which can carry an open
-    transaction and deadlock against the TRUNCATE. Truncating on SETUP (not
-    teardown) is robust against a prior test that left rows.
+    The schema is built once per session in the ``app`` fixture; the shared
+    helper truncates every table and re-seeds the canonical RBAC role rows.
     """
-    from sqlalchemy import inspect, text
-
     from vbwd.extensions import db as _db
 
     with app.app_context():
-        _db.session.remove()
-        table_names = inspect(_db.engine).get_table_names(schema="public")
-        if table_names:
-            quoted = ", ".join(f'public."{name}"' for name in table_names)
-            with _db.engine.begin() as connection:
-                connection.execute(
-                    text(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
-                )
-                if "vbwd_user_role" in table_names:
-                    from sqlalchemy import insert as _insert
-                    from vbwd.models.user_role import (
-                        RoleDefinition as _RoleDefinition,
-                        canonical_role_rows as _canonical_role_rows,
-                    )
+        from vbwd.testing.integration_db import truncate_all_tables
 
-                    connection.execute(
-                        _insert(_RoleDefinition.__table__), _canonical_role_rows()
-                    )
+        truncate_all_tables(_db)
         _seed_default_currency(_db)
         yield _db
         _db.session.remove()
