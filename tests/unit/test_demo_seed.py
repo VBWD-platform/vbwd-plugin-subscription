@@ -206,38 +206,67 @@ def test_test_plan_uses_marker_and_known_slug():
     assert demo_seed.TEST_DATA_MARKER == "TEST_DATA_"
 
 
-def test_seed_test_data_creates_plan_and_subscription_for_new_user():
+def test_seed_test_data_creates_plan_subscription_and_invoice_for_new_user():
     session = MagicMock()
-    # No existing plan, no existing subscription.
+    # No existing plan, no existing subscription, no existing invoice.
     session.query.return_value.filter_by.return_value.first.return_value = None
     test_user = MagicMock(id="user-uuid")
 
     with patch("plugins.subscription.subscription.models.TarifPlan"), patch(
         "plugins.subscription.subscription.models.Subscription"
+    ), patch("vbwd.models.invoice.UserInvoice"), patch(
+        "vbwd.models.invoice_line_item.InvoiceLineItem"
     ):
         demo_seed.seed_test_data(session, test_user)
 
-    # plan + subscription both added
-    assert session.add.call_count == 2
+    # plan + subscription + invoice + subscription line item all added
+    assert session.add.call_count == 4
 
 
-def test_seed_test_data_skips_when_subscription_exists():
+def test_seed_test_data_seeds_invoice_when_subscription_exists_but_invoice_absent():
     session = MagicMock()
     existing_plan = MagicMock()
-    existing_sub = MagicMock()
-    # 1st query: plan lookup → existing; 2nd: subscription lookup → existing
+    existing_sub = MagicMock(id="sub-uuid")
+    # 1st query: plan → existing; 2nd: subscription → existing; 3rd: invoice → None
     session.query.return_value.filter_by.return_value.first.side_effect = [
         existing_plan,
         existing_sub,
+        None,
     ]
     test_user = MagicMock(id="user-uuid")
 
     with patch("plugins.subscription.subscription.models.TarifPlan"), patch(
         "plugins.subscription.subscription.models.Subscription"
+    ), patch("vbwd.models.invoice.UserInvoice"), patch(
+        "vbwd.models.invoice_line_item.InvoiceLineItem"
     ):
         demo_seed.seed_test_data(session, test_user)
 
-    # plan existed and subscription existed → nothing added
+    # plan + subscription existed → only the invoice + its line item are added
+    assert session.add.call_count == 2
+
+
+def test_seed_test_data_skips_invoice_when_one_already_exists():
+    session = MagicMock()
+    existing_plan = MagicMock()
+    existing_sub = MagicMock(id="sub-uuid")
+    existing_invoice = MagicMock()
+    # plan → existing; subscription → existing; invoice → existing
+    session.query.return_value.filter_by.return_value.first.side_effect = [
+        existing_plan,
+        existing_sub,
+        existing_invoice,
+    ]
+    test_user = MagicMock(id="user-uuid")
+
+    with patch("plugins.subscription.subscription.models.TarifPlan"), patch(
+        "plugins.subscription.subscription.models.Subscription"
+    ), patch("vbwd.models.invoice.UserInvoice"), patch(
+        "vbwd.models.invoice_line_item.InvoiceLineItem"
+    ):
+        demo_seed.seed_test_data(session, test_user)
+
+    # everything already existed → nothing added
     assert session.add.call_count == 0
 
 

@@ -224,8 +224,14 @@ def seed_user_access_levels(session) -> int:
 
 
 def seed_test_data(session, test_user) -> None:
-    """Create the test tariff plan + an active subscription for the test
-    user (core test-data seeder delegates here)."""
+    """Create the test tariff plan + an active subscription + a paid invoice for
+    the test user (core test-data seeder delegates here).
+
+    The invoice is a CORE ``UserInvoice`` linked to the subscription via a
+    SUBSCRIPTION ``InvoiceLineItem`` whose ``item_id`` is the subscription id —
+    the canonical link after the subscription extraction (core invoice keeps no
+    subscription/plan FK). It satisfies the user-frontend invoice integration
+    suite (``test_user_has_invoices`` / ``test_invoice_*``)."""
     from plugins.subscription.subscription.models import TarifPlan, Subscription
     from vbwd.models.enums import SubscriptionStatus, BillingPeriod
 
@@ -244,26 +250,72 @@ def seed_test_data(session, test_user) -> None:
         session.add(plan)
         session.flush()
 
-    existing = session.query(Subscription).filter_by(user_id=test_user.id).first()
-    if existing:
-        return
-
-    session.add(
-        Subscription(
+    subscription = session.query(Subscription).filter_by(user_id=test_user.id).first()
+    if subscription is None:
+        subscription = Subscription(
             user_id=test_user.id,
             tarif_plan_id=plan.id,
             status=SubscriptionStatus.ACTIVE,
             started_at=datetime.now(timezone.utc),
             expires_at=datetime.now(timezone.utc) + timedelta(days=30),
         )
+        session.add(subscription)
+        session.flush()
+
+    _seed_test_invoice(session, test_user, subscription, plan)
+
+
+def _seed_test_invoice(session, test_user, subscription, plan) -> None:
+    """Create one PAID invoice (+ SUBSCRIPTION line item) for the test user.
+
+    Idempotent: skips if the test user already has an invoice."""
+    from vbwd.models.enums import InvoiceStatus, LineItemType
+    from vbwd.models.invoice import UserInvoice
+    from vbwd.models.invoice_line_item import InvoiceLineItem
+
+    existing = session.query(UserInvoice).filter_by(user_id=test_user.id).first()
+    if existing is not None:
+        return
+
+    now = datetime.now(timezone.utc)
+    invoice = UserInvoice(
+        user_id=test_user.id,
+        invoice_number=UserInvoice.generate_invoice_number(),
+        amount=plan.price,
+        currency="EUR",
+        status=InvoiceStatus.PAID,
+        payment_method="basic",
+        subtotal=plan.price,
+        tax_amount=0,
+        total_amount=plan.price,
+        invoiced_at=now,
+        paid_at=now,
+    )
+    session.add(invoice)
+    session.flush()
+
+    session.add(
+        InvoiceLineItem(
+            invoice_id=invoice.id,
+            item_type=LineItemType.SUBSCRIPTION,
+            item_id=subscription.id,
+            description=f"{plan.name} subscription",
+            quantity=1,
+            unit_price=plan.price,
+            total_price=plan.price,
+            net_amount=plan.price,
+            tax_amount=0,
+        )
     )
     session.flush()
 
 
 def clean_test_data(session) -> None:
-    """Delete the test users' subscriptions + the test plan (core
+    """Delete the test users' invoices + subscriptions + the test plan (core
     test-data cleaner delegates here, before core deletes the users)."""
     from plugins.subscription.subscription.models import TarifPlan, Subscription
+    from vbwd.models.invoice import UserInvoice
+    from vbwd.models.invoice_line_item import InvoiceLineItem
     from vbwd.models.user import User
 
     test_emails = [
@@ -272,6 +324,17 @@ def clean_test_data(session) -> None:
     ]
     users = session.query(User).filter(User.email.in_(test_emails)).all()
     for user in users:
+        invoice_ids = [
+            invoice.id
+            for invoice in session.query(UserInvoice).filter_by(user_id=user.id).all()
+        ]
+        if invoice_ids:
+            session.query(InvoiceLineItem).filter(
+                InvoiceLineItem.invoice_id.in_(invoice_ids)
+            ).delete(synchronize_session=False)
+            session.query(UserInvoice).filter(UserInvoice.id.in_(invoice_ids)).delete(
+                synchronize_session=False
+            )
         session.query(Subscription).filter_by(user_id=user.id).delete(
             synchronize_session=False
         )
