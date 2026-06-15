@@ -38,7 +38,11 @@ overengineering. Quality guard: ``bin/pre-commit-check.sh --plugin subscription
 from enum import Enum
 from typing import Any, List, Optional
 
-from vbwd.services.data_exchange.base_model_exchanger import BaseModelExchanger
+from vbwd.models.enums import BillingPeriod
+from vbwd.services.data_exchange.base_model_exchanger import (
+    LOADTEST_SLUG_PREFIX,
+    BaseModelExchanger,
+)
 from vbwd.services.data_exchange.port import (
     CLUSTER_SALES,
     EntityExchanger,
@@ -83,6 +87,51 @@ class _SessionModelRepository:
 
     def delete_all(self) -> None:
         self._session.query(self._model_class).delete()
+
+    # ── heavy-load scale hooks (S89.1) ────────────────────────────────────
+    # The base exchanger calls these via ``getattr`` when present so a 100k
+    # seed/export is O(batches), not O(N²). Absent → it falls back to full
+    # ``find_all`` scans (fine for tiny tables, too slow at load-test scale).
+
+    def iter_rows(self, batch_size: int) -> Any:
+        """Yield rows in ``yield_per`` pages (bounded memory)."""
+        return (
+            self._session.query(self._model_class)
+            .yield_per(batch_size)
+            .enable_eagerloads(False)
+        )
+
+    def bulk_add(self, instances: List[Any]) -> None:
+        """Insert a batch through the unit of work (one flush per batch).
+
+        Uses ``add_all`` + ``flush`` rather than ``bulk_save_objects`` because a
+        seeded plan carries an M2M ``categories`` link that
+        ``bulk_save_objects`` would silently skip (it bypasses relationship
+        cascades). ``add_all`` keeps the batch a single flush — still
+        O(batches) — while persisting the association rows. The caller commits.
+        """
+        self._session.add_all(instances)
+        self._session.flush()
+
+    def find_natural_keys_with_prefix(self, prefix: str) -> List[str]:
+        """Return the natural-key values that start with ``prefix`` (idempotency)."""
+        column = getattr(self._model_class, self._natural_key)
+        rows = self._session.query(column).filter(column.like(f"{prefix}%")).all()
+        return [row[0] for row in rows]
+
+    def delete_natural_keys_with_prefix(self, prefix: str) -> int:
+        """Delete every row whose natural key starts with ``prefix``. Returns count.
+
+        Scoped to this model and the ``loadtest-`` prefix only, so it never
+        touches real/demo data. ``synchronize_session=False`` keeps it a single
+        statement (the caller commits the session).
+        """
+        column = getattr(self._model_class, self._natural_key)
+        return (
+            self._session.query(self._model_class)
+            .filter(column.like(f"{prefix}%"))
+            .delete(synchronize_session=False)
+        )
 
 
 class _PermissionMappedModelExchanger(BaseModelExchanger):
@@ -226,6 +275,140 @@ class _M2MSlugExchanger(_PermissionMappedModelExchanger):
                 setattr(instance, self._relationship_attr, related)
 
 
+class _SubscriptionPlansSeedExchanger(_M2MSlugExchanger):
+    """``subscription_plans`` exchanger + S89.1 load-test seed support.
+
+    A synthetic plan needs a non-null ``name``, ``billing_period`` and a valid
+    ``price``, and links the one shared ``loadtest-`` plan category (so 100k
+    plans sit in one category — cheap to reset). The base ``bulk_seed`` loop
+    builds each instance via ``_build_instance``; ``_M2MSlugExchanger`` pops the
+    ``category_slugs`` link in ``_import_row`` before reaching
+    ``_build_instance``, so popping + attaching the category here is seed-only
+    and import-safe.
+    """
+
+    _SEED_PLAN_PRICE = 19.0
+    _SEED_CATEGORY_SLUG = f"{LOADTEST_SLUG_PREFIX}subscription_plans-cat"
+    _SEED_CATEGORY_NAME = "Load-test plans"
+
+    # Cache of the one shared ``loadtest-`` category; ``None`` until the first
+    # seeded row creates/looks it up. Declared so mypy sees the attr.
+    _seed_category: Optional[Any] = None
+
+    def _seed_row(self, index: int, natural_value: str) -> dict:
+        return {
+            "slug": natural_value,
+            "name": f"Load-test plan {index}",
+            "description": f"Synthetic load-test plan {index}",
+            "price": self._SEED_PLAN_PRICE,
+            "billing_period": BillingPeriod.MONTHLY,
+            "features": [],
+            "trial_days": 0,
+            "is_active": True,
+            "sort_order": index,
+            "category_slugs": [self._SEED_CATEGORY_SLUG],
+        }
+
+    def _build_instance(self, row: dict) -> Any:
+        """Build a ``TarifPlan``; attach the shared category ONLY on the seed path.
+
+        ``bulk_seed`` leaves ``category_slugs`` in the row (set by ``_seed_row``);
+        import pops it in ``_M2MSlugExchanger._import_row`` before this runs. So
+        the presence of ``category_slugs`` distinguishes seed from import — on
+        import we defer to the base (the M2M is reapplied by ``_import_row``) and
+        never spawn the load-test category.
+        """
+        if "category_slugs" not in row:
+            return super()._build_instance(row)
+        prepared = dict(row)
+        prepared.pop("category_slugs", None)
+        plan = self._model_class(**prepared)
+        plan.categories = [self._ensure_seed_prerequisite()]
+        return plan
+
+    def _ensure_seed_prerequisite(self) -> Any:
+        """Return the one shared ``loadtest-`` plan category, creating it once.
+
+        Created + committed through the existing
+        ``TarifPlanCategoryRepository`` (no raw SQL) and cached so 100k plans
+        share one category. Idempotent — an existing category is reused.
+        """
+        if self._seed_category is not None:
+            return self._seed_category
+        from plugins.subscription.subscription.models.tarif_plan_category import (
+            TarifPlanCategory,
+        )
+        from plugins.subscription.subscription.repositories.tarif_plan_category_repository import (
+            TarifPlanCategoryRepository,
+        )
+
+        repository = TarifPlanCategoryRepository(self._session)
+        category = repository.find_by_slug(self._SEED_CATEGORY_SLUG)
+        if category is None:
+            category = TarifPlanCategory(
+                slug=self._SEED_CATEGORY_SLUG,
+                name=self._SEED_CATEGORY_NAME,
+                description="Shared category for load-test plans (S89.1).",
+            )
+            repository.save(category)
+        self._seed_category = category
+        return category
+
+    def _reset_loadtest_rows(self) -> int:
+        deleted = super()._reset_loadtest_rows()
+        self._drop_orphaned_seed_category()
+        self._seed_category = None
+        return deleted
+
+    def _drop_orphaned_seed_category(self) -> None:
+        from plugins.subscription.subscription.models.tarif_plan import TarifPlan
+        from plugins.subscription.subscription.models.tarif_plan_category import (
+            TarifPlanCategory,
+        )
+
+        category = (
+            self._session.query(TarifPlanCategory)
+            .filter(TarifPlanCategory.slug == self._SEED_CATEGORY_SLUG)
+            .first()
+        )
+        if category is None:
+            return
+        # Query the DB for any plan still in this category rather than reading the
+        # (possibly stale) relationship: the prefix delete ran with
+        # ``synchronize_session=False`` so the loaded collection may be stale.
+        still_referenced = (
+            self._session.query(TarifPlan.id)
+            .filter(TarifPlan.categories.any(TarifPlanCategory.id == category.id))
+            .first()
+        )
+        if still_referenced is None:
+            self._session.delete(category)
+
+
+class _SubscriptionAddonsSeedExchanger(_M2MSlugExchanger):
+    """``subscription_addons`` exchanger + S89.1 load-test seed support.
+
+    Add-ons carry no required FK (the ``tarif_plans`` M2M is optional — an
+    add-on with no plans is "independent / visible to all"), so a seeded add-on
+    is a flat row: a valid ``name``, ``price`` and string ``billing_period``.
+    No prerequisite is created; the base ``_build_instance`` builds it directly.
+    """
+
+    _SEED_ADDON_PRICE = 4.99
+
+    def _seed_row(self, index: int, natural_value: str) -> dict:
+        return {
+            "slug": natural_value,
+            "name": f"Load-test add-on {index}",
+            "description": f"Synthetic load-test add-on {index}",
+            "price": self._SEED_ADDON_PRICE,
+            "billing_period": BillingPeriod.MONTHLY.value,
+            "config": {},
+            "is_active": True,
+            "sort_order": index,
+        }
+
+
 class SubscriptionsExchanger(EntityExchanger):
     """``Subscription`` records, keyed by ``id`` — export-only.
 
@@ -324,7 +507,7 @@ def build_subscription_exchangers(session: Any) -> List[EntityExchanger]:
             view_permission=PERM_PLANS_VIEW,
             manage_permission=PERM_PLANS_MANAGE,
         ),
-        _M2MSlugExchanger(
+        _SubscriptionPlansSeedExchanger(
             entity_key="subscription_plans",
             label="Subscription Plans",
             cluster=CLUSTER_SALES,
@@ -351,7 +534,7 @@ def build_subscription_exchangers(session: Any) -> List[EntityExchanger]:
             related_model=TarifPlanCategory,
             related_natural_key="slug",
         ),
-        _M2MSlugExchanger(
+        _SubscriptionAddonsSeedExchanger(
             entity_key="subscription_addons",
             label="Subscription Add-ons",
             cluster=CLUSTER_SALES,
