@@ -112,9 +112,7 @@ class TestBulkSeedPlans:
         _exchangers(db.session)["subscription_plans"].bulk_seed(10)
         db.session.commit()
 
-        result = _exchangers(db.session)["subscription_plans"].bulk_seed(
-            5, reset=True
-        )
+        result = _exchangers(db.session)["subscription_plans"].bulk_seed(5, reset=True)
         db.session.commit()
 
         assert result.deleted == 10
@@ -165,9 +163,7 @@ class TestBulkSeedAddons:
         exchanger.bulk_seed(10)
         db.session.commit()
 
-        result = _exchangers(db.session)["subscription_addons"].bulk_seed(
-            0, reset=True
-        )
+        result = _exchangers(db.session)["subscription_addons"].bulk_seed(0, reset=True)
         db.session.commit()
 
         assert result.deleted == 10
