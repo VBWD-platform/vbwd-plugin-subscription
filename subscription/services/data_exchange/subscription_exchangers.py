@@ -309,6 +309,28 @@ class _SubscriptionPlansSeedExchanger(_M2MSlugExchanger):
             "category_slugs": [self._SEED_CATEGORY_SLUG],
         }
 
+    def _resolve_related(
+        self, slugs: List[Any], index: int, result: ImportResult
+    ) -> Optional[List[Any]]:
+        """Resolve the linked category slugs, self-healing the seed prerequisite.
+
+        The S89 bench resets the one shared ``loadtest-`` plan category before
+        each ``import:cold``; the exported envelope still references it, so when
+        that slug alone is missing we recreate it via ``_ensure_seed_prerequisite``
+        instead of skipping. Any OTHER unknown slug still skips-with-error via the
+        base resolver — never invent data for a typo (Liskov).
+        """
+        if self._SEED_CATEGORY_SLUG in slugs:
+            column = getattr(self._related_model, self._related_natural_key)
+            existing = (
+                self._session.query(self._related_model)
+                .filter(column == self._SEED_CATEGORY_SLUG)
+                .first()
+            )
+            if existing is None:
+                self._ensure_seed_prerequisite()
+        return super()._resolve_related(slugs, index, result)
+
     def _build_instance(self, row: dict) -> Any:
         """Build a ``TarifPlan``; attach the shared category ONLY on the seed path.
 
@@ -331,9 +353,14 @@ class _SubscriptionPlansSeedExchanger(_M2MSlugExchanger):
 
         Created + committed through the existing
         ``TarifPlanCategoryRepository`` (no raw SQL) and cached so 100k plans
-        share one category. Idempotent — an existing category is reused.
+        share one category. Idempotent — an existing category is reused. A cached
+        category that has since been deleted (e.g. a reset on a sibling
+        exchanger) is dropped and re-created, so the cache never returns a stale
+        referent.
         """
-        if self._seed_category is not None:
+        if self._seed_category is not None and not self._is_deleted(
+            self._seed_category
+        ):
             return self._seed_category
         from plugins.subscription.subscription.models.tarif_plan_category import (
             TarifPlanCategory,
@@ -353,6 +380,18 @@ class _SubscriptionPlansSeedExchanger(_M2MSlugExchanger):
             repository.save(category)
         self._seed_category = category
         return category
+
+    @staticmethod
+    def _is_deleted(instance: Any) -> bool:
+        """True when ``instance`` has been deleted/detached from its session.
+
+        Guards the cache: a sibling exchanger's reset can delete the cached
+        category out from under this instance, leaving it deleted/detached.
+        """
+        from sqlalchemy import inspect as sqlalchemy_inspect
+
+        state = sqlalchemy_inspect(instance)
+        return state.deleted or state.detached
 
     def _reset_loadtest_rows(self) -> int:
         deleted = super()._reset_loadtest_rows()

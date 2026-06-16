@@ -99,6 +99,76 @@ class TestBulkSeedPlans:
         )
         assert len(categories) == 1
 
+    def test_round_trips_after_reset_drops_shared_category(self, db):
+        """Reproduce the S89 bench: reset deletes the shared plan category, then
+        the exported envelope is re-imported. The load-test category slug must be
+        self-healed (recreated) so all plans import, not skipped.
+        """
+        exchanger = _exchangers(db.session)["subscription_plans"]
+        exchanger.bulk_seed(10)
+        db.session.commit()
+
+        exported = exchanger.export(ExportSelector(ids=None), include_pii=False).rows
+        loadtest_rows = [r for r in exported if r["slug"].startswith("loadtest-")]
+        assert len(loadtest_rows) == 10
+
+        # Reset to empty: drops the load-test plans AND the now-orphaned shared
+        # ``loadtest-`` category (the production sequence before ``import:cold``).
+        _exchangers(db.session)["subscription_plans"].bulk_seed(0, reset=True)
+        db.session.commit()
+        assert (
+            db.session.query(TarifPlanCategory)
+            .filter(TarifPlanCategory.slug == _PLAN_CATEGORY_SLUG)
+            .first()
+            is None
+        )
+
+        payload = build_envelope("subscription_plans", loadtest_rows, instance="test")
+        result = exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        assert result.errors == []
+        assert result.created == 10
+        rebuilt = _loadtest(db.session, TarifPlan)
+        assert len(rebuilt) == 10
+        assert all(
+            [c.slug for c in plan.categories] == [_PLAN_CATEGORY_SLUG]
+            for plan in rebuilt
+        )
+
+        re_exported = exchanger.export(ExportSelector(ids=None), include_pii=False).rows
+        assert len([r for r in re_exported if r["slug"].startswith("loadtest-")]) == 10
+
+    def test_import_unknown_non_seed_category_still_skips_with_error(self, db):
+        """Guard against an over-broad fix: an unknown (non-seed) plan category
+        slug must still skip-with-error, never auto-create a category.
+        """
+        exchanger = _exchangers(db.session)["subscription_plans"]
+        payload = build_envelope(
+            "subscription_plans",
+            [
+                {
+                    "slug": "manual-plan",
+                    "name": "Manual",
+                    "price": 9.0,
+                    "billing_period": BillingPeriod.MONTHLY.value,
+                    "category_slugs": ["definitely-not-a-real-category"],
+                }
+            ],
+            instance="test",
+        )
+
+        result = exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        assert result.created == 0
+        assert len(result.errors) == 1
+        assert "definitely-not-a-real-category" in result.errors[0]["reason"]
+        assert (
+            db.session.query(TarifPlanCategory)
+            .filter(TarifPlanCategory.slug == "definitely-not-a-real-category")
+            .first()
+            is None
+        )
+
     def test_reset_drops_only_loadtest(self, db):
         keeper = TarifPlan(
             slug="real-plan",
