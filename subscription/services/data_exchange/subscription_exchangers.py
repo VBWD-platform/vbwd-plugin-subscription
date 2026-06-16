@@ -35,11 +35,13 @@ exchanger / existing models); Liskov (export-only raises); clean code; no
 overengineering. Quality guard: ``bin/pre-commit-check.sh --plugin subscription
 --full``.
 """
+from contextlib import contextmanager
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 from vbwd.models.enums import BillingPeriod
 from vbwd.services.data_exchange.base_model_exchanger import (
+    EXPORT_CHUNK_SIZE,
     LOADTEST_SLUG_PREFIX,
     BaseModelExchanger,
 )
@@ -87,13 +89,39 @@ class _SessionModelRepository:
         # ``(table, fk_column)``; we clear them set-based (one statement each)
         # before the parent delete, so the parent cascade finds nothing to scan.
         self._dependent_fk_deletes = list(dependent_fk_deletes or [])
+        # Optional per-import existence cache (S89 round 3): the exchanger sets it
+        # for the duration of one import so ``find_by_natural_key`` answers in
+        # memory instead of one SELECT per row (the 100k import bottleneck).
+        # ``None`` outside an import → the direct query (callers/tests unaffected).
+        self._natural_key_cache: Optional[Dict[Any, Any]] = None
 
     def find_all(self) -> List[Any]:
         return self._session.query(self._model_class).all()
 
     def find_by_natural_key(self, value: Any) -> Optional[Any]:
+        if self._natural_key_cache is not None:
+            return self._natural_key_cache.get(value)
         column = getattr(self._model_class, self._natural_key)
         return self._session.query(self._model_class).filter(column == value).first()
+
+    def set_natural_key_cache(self, cache: Optional[Dict[Any, Any]]) -> None:
+        """Activate/clear the per-import existence cache (set by the exchanger)."""
+        self._natural_key_cache = cache
+
+    def add_to_natural_key_cache(self, value: Any, instance: Any) -> None:
+        """Record a just-created instance so it is found by the cache thereafter."""
+        if self._natural_key_cache is not None:
+            self._natural_key_cache[value] = instance
+
+    def load_natural_key_cache(self) -> Dict[Any, Any]:
+        """Build the existence cache with ONE query (natural key → instance)."""
+        natural_key = self._natural_key
+        rows = self._session.query(self._model_class).all()
+        return {
+            getattr(row, natural_key): row
+            for row in rows
+            if getattr(row, natural_key) is not None
+        }
 
     def add(self, instance: Any) -> None:
         self._session.add(instance)
@@ -250,6 +278,11 @@ class _M2MSlugExchanger(_PermissionMappedModelExchanger):
     assigns the relationship (skip-with-error on an unknown slug — Liskov).
     """
 
+    # Per-import related-model (e.g. category) cache: preloaded ONCE per import so
+    # ``_resolve_related`` is an in-memory lookup, not one SELECT per slug per row
+    # (the 100k bottleneck). ``None`` outside an import → the direct query.
+    _related_cache: Optional[Dict[Any, Any]]
+
     def __init__(
         self,
         *,
@@ -264,6 +297,57 @@ class _M2MSlugExchanger(_PermissionMappedModelExchanger):
         self._relationship_attr = relationship_attr
         self._related_model = related_model
         self._related_natural_key = related_natural_key
+        self._related_cache = None
+
+    # ── per-import caches (S89 round 3) ────────────────────────────────────
+
+    def import_(self, payload: dict, *, mode: str, dry_run: bool) -> ImportResult:
+        with self._import_caches():
+            return super().import_(payload, mode=mode, dry_run=dry_run)
+
+    def import_ndjson(
+        self,
+        lines: Iterable[str],
+        *,
+        mode: str,
+        dry_run: bool,
+        chunk_size: int = EXPORT_CHUNK_SIZE,
+    ) -> ImportResult:
+        with self._import_caches():
+            return super().import_ndjson(
+                lines, mode=mode, dry_run=dry_run, chunk_size=chunk_size
+            )
+
+    @contextmanager
+    def _import_caches(self) -> Iterator[None]:
+        """Build the per-call caches, clear them in ``finally``.
+
+        ONE SELECT loads every related row (keyed by its natural key) and ONE
+        loads every existing model row (on the repository's existence cache), so
+        the per-row relationship resolve + existence check are in-memory rather
+        than ~2 SELECTs per row. Both caches are torn down on exit so a repeat
+        import never sees stale data.
+        """
+        self._related_cache = self._load_related_cache()
+        load_cache = getattr(self._repository, "load_natural_key_cache", None)
+        set_cache = getattr(self._repository, "set_natural_key_cache", None)
+        repo_caches = callable(load_cache) and callable(set_cache)
+        if repo_caches:
+            set_cache(load_cache())
+        try:
+            yield
+        finally:
+            self._related_cache = None
+            if repo_caches:
+                set_cache(None)
+
+    def _load_related_cache(self) -> Dict[Any, Any]:
+        related_rows = self._session.query(self._related_model).all()
+        return {
+            getattr(related, self._related_natural_key): related
+            for related in related_rows
+            if getattr(related, self._related_natural_key) is not None
+        }
 
     def _serialise_row(self, row: Any, *, include_pii: bool) -> dict:
         serialised = super()._serialise_row(row, include_pii=include_pii)
@@ -273,15 +357,19 @@ class _M2MSlugExchanger(_PermissionMappedModelExchanger):
         ]
         return serialised
 
+    def _find_related_by_natural_key(self, slug: Any) -> Any:
+        """Resolve a related row by natural key — via the preload cache when active."""
+        if self._related_cache is not None:
+            return self._related_cache.get(slug)
+        column = getattr(self._related_model, self._related_natural_key)
+        return self._session.query(self._related_model).filter(column == slug).first()
+
     def _resolve_related(
         self, slugs: List[Any], index: int, result: ImportResult
     ) -> Optional[List[Any]]:
         resolved: List[Any] = []
         for slug in slugs:
-            column = getattr(self._related_model, self._related_natural_key)
-            related = (
-                self._session.query(self._related_model).filter(column == slug).first()
-            )
+            related = self._find_related_by_natural_key(slug)
             if related is None:
                 result.errors.append(
                     {
@@ -313,6 +401,21 @@ class _M2MSlugExchanger(_PermissionMappedModelExchanger):
             instance = self._repository.find_by_natural_key(row.get(self.natural_key))
             if instance is not None:
                 setattr(instance, self._relationship_attr, related)
+
+    def _build_instance(self, row: dict) -> Any:
+        """Build the model AND register it in the existence cache (create path).
+
+        The base ``_import_row`` calls this only when creating a new row; adding
+        the instance to the repository's existence cache keeps the post-create
+        ``find_by_natural_key`` (M2M reapply, and any duplicate natural key later
+        in the same envelope) cache-served — no per-row SELECT.
+        """
+        instance = super()._build_instance(row)
+        natural_value = row.get(self.natural_key)
+        register = getattr(self._repository, "add_to_natural_key_cache", None)
+        if natural_value is not None and callable(register):
+            register(natural_value, instance)
+        return instance
 
 
 class _SubscriptionPlansSeedExchanger(_M2MSlugExchanger):
@@ -359,14 +462,14 @@ class _SubscriptionPlansSeedExchanger(_M2MSlugExchanger):
         that slug alone is missing we recreate it via ``_ensure_seed_prerequisite``
         instead of skipping. Any OTHER unknown slug still skips-with-error via the
         base resolver — never invent data for a typo (Liskov).
+
+        The seed-slug existence check is served by the per-import related cache
+        (``_find_related_by_natural_key``) so it is in-memory, not one SELECT per
+        row; a self-healed category is written into that cache so the remaining
+        rows resolve it without a query.
         """
         if self._SEED_CATEGORY_SLUG in slugs:
-            column = getattr(self._related_model, self._related_natural_key)
-            existing = (
-                self._session.query(self._related_model)
-                .filter(column == self._SEED_CATEGORY_SLUG)
-                .first()
-            )
+            existing = self._find_related_by_natural_key(self._SEED_CATEGORY_SLUG)
             if existing is None:
                 self._ensure_seed_prerequisite()
         return super()._resolve_related(slugs, index, result)
@@ -419,6 +522,10 @@ class _SubscriptionPlansSeedExchanger(_M2MSlugExchanger):
             )
             repository.save(category)
         self._seed_category = category
+        # Keep the per-import related cache consistent so a self-healed seed
+        # category is served in-memory for the remaining rows (no per-row query).
+        if self._related_cache is not None:
+            self._related_cache[self._SEED_CATEGORY_SLUG] = category
         return category
 
     @staticmethod

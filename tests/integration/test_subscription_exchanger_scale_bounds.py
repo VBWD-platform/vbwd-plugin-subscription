@@ -35,6 +35,12 @@ from plugins.subscription.subscription.services.data_exchange.subscription_excha
 
 _SEED_CATEGORY_SLUG = "loadtest-subscription_plans-cat"
 
+# A small FIXED ceiling on per-table SELECTs during an import: the two cache
+# preloads plus a handful of relationship lazy-loads that do NOT scale with the
+# row count. Well under any per-row (~N) regression, so a return to per-row
+# queries still trips the assertion.
+_MAX_FIXED_SELECTS = 20
+
 
 def _plans_exchanger(session):
     return {
@@ -81,6 +87,14 @@ def _count_deletes_for(statements, table_name):
     )
 
 
+def _count_selects_for(statements, table_name):
+    return sum(
+        1
+        for statement in statements
+        if statement.upper().lstrip().startswith("SELECT") and table_name in statement
+    )
+
+
 class TestPlansImportFlushBound:
     def test_plans_import_flushes_per_batch_not_per_row(self, db):
         row_count = 500
@@ -116,6 +130,130 @@ class TestPlansImportFlushBound:
             f"expected <= {max_expected_flushes} flushes for {row_count} plans, "
             f"got {flushes['count']} (regressed to per-row flush?)"
         )
+
+
+class TestPlansImportSelectBound:
+    """The plans upsert import must NOT issue per-row SELECTs.
+
+    The old ``_resolve_related`` did one category SELECT per slug per row and the
+    base ``_import_row`` did one ``find_by_natural_key`` SELECT per row — ~2N
+    sequential round-trips. The fix preloads both into per-import caches so the
+    SELECT count against ``tarif_plan`` / ``tarif_plan_category`` is bounded.
+    """
+
+    def test_cold_upsert_into_empty_table_is_o1_selects(self, db):
+        row_count = 300
+        exchanger = _plans_exchanger(db.session)
+        exchanger._ensure_seed_prerequisite()
+        db.session.commit()
+
+        rows = [
+            {
+                "slug": f"loadtest-subscription_plans-{index}",
+                "name": f"Load-test plan {index}",
+                "price": 19.0,
+                "billing_period": "MONTHLY",
+                "features": [],
+                "trial_days": 0,
+                "is_active": True,
+                "sort_order": index,
+                "category_slugs": [_SEED_CATEGORY_SLUG],
+            }
+            for index in range(row_count)
+        ]
+        payload = build_envelope("subscription_plans", rows, instance="test")
+
+        import_exchanger = _plans_exchanger(db.session)
+        engine = db.session.get_bind()
+        with _record_statements(engine) as statements:
+            result = import_exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        assert result.created == row_count
+        category_selects = _count_selects_for(
+            statements, TarifPlanCategory.__tablename__
+        )
+        plan_selects = _count_selects_for(statements, TarifPlan.__tablename__)
+        assert category_selects <= _MAX_FIXED_SELECTS, (
+            f"expected O(1) category SELECTs, got {category_selects} for "
+            f"{row_count} plans (regressed to per-row resolve_related?)"
+        )
+        assert plan_selects <= _MAX_FIXED_SELECTS, (
+            f"expected O(1) existence SELECTs, got {plan_selects} for "
+            f"{row_count} plans (regressed to per-row find_by_natural_key?)"
+        )
+
+    def test_upsert_into_populated_table_is_o1_selects(self, db):
+        row_count = 300
+        seed_exchanger = _plans_exchanger(db.session)
+        seed_exchanger.bulk_seed(row_count)
+        db.session.commit()
+        assert (
+            db.session.query(TarifPlan)
+            .filter(TarifPlan.slug.like("loadtest-%"))
+            .count()
+            == row_count
+        )
+
+        rows = [
+            {
+                "slug": f"loadtest-subscription_plans-{index}",
+                "name": f"Load-test plan {index} (v2)",
+                "price": 20.0,
+                "billing_period": "MONTHLY",
+                "features": [],
+                "trial_days": 0,
+                "is_active": True,
+                "sort_order": index,
+                "category_slugs": [_SEED_CATEGORY_SLUG],
+            }
+            for index in range(row_count)
+        ]
+        payload = build_envelope("subscription_plans", rows, instance="test")
+
+        import_exchanger = _plans_exchanger(db.session)
+        engine = db.session.get_bind()
+        with _record_statements(engine) as statements:
+            result = import_exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        assert result.updated == row_count
+        category_selects = _count_selects_for(
+            statements, TarifPlanCategory.__tablename__
+        )
+        plan_selects = _count_selects_for(statements, TarifPlan.__tablename__)
+        assert (
+            category_selects <= _MAX_FIXED_SELECTS
+        ), f"expected O(1) category SELECTs, got {category_selects}"
+        assert plan_selects <= _MAX_FIXED_SELECTS, (
+            f"expected O(1) existence SELECTs, got {plan_selects} for "
+            f"{row_count} existing plans (existence not served from preload?)"
+        )
+
+    def test_unknown_non_seed_category_still_skips_with_error(self, db):
+        exchanger = _plans_exchanger(db.session)
+        exchanger._ensure_seed_prerequisite()
+        db.session.commit()
+
+        rows = [
+            {
+                "slug": "loadtest-subscription_plans-bad",
+                "name": "Bad plan",
+                "price": 19.0,
+                "billing_period": "MONTHLY",
+                "features": [],
+                "trial_days": 0,
+                "is_active": True,
+                "sort_order": 0,
+                "category_slugs": ["definitely-not-a-real-category"],
+            }
+        ]
+        payload = build_envelope("subscription_plans", rows, instance="test")
+
+        import_exchanger = _plans_exchanger(db.session)
+        result = import_exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        assert result.created == 0
+        assert len(result.errors) == 1
+        assert "unknown category_slugs" in result.errors[0]["reason"]
 
 
 class TestPlansResetStatementBound:
