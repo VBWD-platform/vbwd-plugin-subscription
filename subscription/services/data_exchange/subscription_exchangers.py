@@ -70,10 +70,23 @@ class _SessionModelRepository:
     those (ISP) without touching the existing repos.
     """
 
-    def __init__(self, session: Any, model_class: type, natural_key: str) -> None:
+    def __init__(
+        self,
+        session: Any,
+        model_class: type,
+        natural_key: str,
+        dependent_fk_deletes: Optional[List[Any]] = None,
+    ) -> None:
         self._session = session
         self._model_class = model_class
         self._natural_key = natural_key
+        # M2M-link tables whose rows reference this model by a FK that the DB
+        # cascade traverses WITHOUT a supporting index (the second column of a
+        # composite PK). A bulk parent delete would then fire one unindexed
+        # seq-scan per parent row (O(N²) — the S89 100k reset hang). Each entry is
+        # ``(table, fk_column)``; we clear them set-based (one statement each)
+        # before the parent delete, so the parent cascade finds nothing to scan.
+        self._dependent_fk_deletes = list(dependent_fk_deletes or [])
 
     def find_all(self) -> List[Any]:
         return self._session.query(self._model_class).all()
@@ -125,13 +138,40 @@ class _SessionModelRepository:
         Scoped to this model and the ``loadtest-`` prefix only, so it never
         touches real/demo data. ``synchronize_session=False`` keeps it a single
         statement (the caller commits the session).
+
+        Dependent link rows (declared in ``dependent_fk_deletes``) are cleared
+        first with one set-based statement each — keyed on the prefixed parent
+        set — so the parent delete's DB cascade has nothing left to seq-scan per
+        row. The whole reset is therefore a bounded number of statements
+        (1 per dependent table + 1 parent delete), not O(N).
         """
         column = getattr(self._model_class, self._natural_key)
+        self._clear_dependent_rows(column, prefix)
         return (
             self._session.query(self._model_class)
             .filter(column.like(f"{prefix}%"))
             .delete(synchronize_session=False)
         )
+
+    def _clear_dependent_rows(self, key_column: Any, prefix: str) -> None:
+        """Set-based delete the dependent link rows of the prefixed parents.
+
+        Each dependent table is cleared with a single
+        ``DELETE ... WHERE fk_column IN (SELECT id FROM parent WHERE key LIKE ...)``
+        — one pass over the dependent table (a hash/merge join), never one
+        seq-scan per parent. No raw SQL: the parent id set is a SQLAlchemy
+        subquery and each delete is a Core ``table.delete()``.
+        """
+        if not self._dependent_fk_deletes:
+            return
+        parent_id_select = (
+            self._session.query(getattr(self._model_class, "id"))
+            .filter(key_column.like(f"{prefix}%"))
+            .scalar_subquery()
+        )
+        for table, fk_column in self._dependent_fk_deletes:
+            statement = table.delete().where(fk_column.in_(parent_id_select))
+            self._session.execute(statement)
 
 
 class _PermissionMappedModelExchanger(BaseModelExchanger):
@@ -519,11 +559,26 @@ class SubscriptionsExchanger(EntityExchanger):
 
 def build_subscription_exchangers(session: Any) -> List[EntityExchanger]:
     """Construct the subscription exchangers bound to ``session``."""
-    from plugins.subscription.subscription.models.addon import AddOn
+    from plugins.subscription.subscription.models.addon import (
+        AddOn,
+        addon_tarif_plans,
+    )
     from plugins.subscription.subscription.models.tarif_plan import TarifPlan
     from plugins.subscription.subscription.models.tarif_plan_category import (
         TarifPlanCategory,
+        tarif_plan_category_plans,
     )
+
+    # Tables that reference ``TarifPlan`` by a FK the DB cascade would traverse —
+    # cleared set-based before a bulk plan delete so the reset stays O(stmts),
+    # not O(N²). Both M2M PKs lead with the OTHER column (``category_id`` /
+    # ``addon_id``), so the cascade lookup on ``tarif_plan_id`` is unindexed → a
+    # seq-scan per deleted plan. (``subscription_tarif_plan_tax`` leads with
+    # ``tarif_plan_id``, so its cascade is already indexed — not listed here.)
+    plan_dependent_fk_deletes = [
+        (tarif_plan_category_plans, tarif_plan_category_plans.c.tarif_plan_id),
+        (addon_tarif_plans, addon_tarif_plans.c.tarif_plan_id),
+    ]
 
     return [
         SubscriptionsExchanger(session),
@@ -552,7 +607,12 @@ def build_subscription_exchangers(session: Any) -> List[EntityExchanger]:
             cluster=CLUSTER_SALES,
             natural_key="slug",
             model_class=TarifPlan,
-            repository=_SessionModelRepository(session, TarifPlan, "slug"),
+            repository=_SessionModelRepository(
+                session,
+                TarifPlan,
+                "slug",
+                dependent_fk_deletes=plan_dependent_fk_deletes,
+            ),
             session=session,
             public_fields=[
                 "slug",
