@@ -86,8 +86,11 @@ def checkout():
         except (ValueError, TypeError):
             return jsonify({"error": f"Invalid add_on_id: {addon_id}"}), 400
 
-    # Get currency and payment method
-    currency = data.get("currency", "USD")
+    # Get currency and payment method. The billing currency is the operating
+    # currency (S99) — read the setting, never a literal fallback.
+    from vbwd.services.core_settings_store import get_default_currency
+
+    currency = data.get("currency") or get_default_currency()
     payment_method_code = data.get("payment_method_code")
     coupon_code = data.get("coupon_code")
 

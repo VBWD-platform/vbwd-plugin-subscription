@@ -341,6 +341,16 @@ class SubscriptionPlugin(BasePlugin):
         register_test_data_cleaner(demo_seed.clean_test_data)
         logger.info("[subscription] Demo/test data hooks registered")
 
+        # Cross-entity search seam — contribute active subscription plans to the
+        # agnostic search registry so the /search bot can find them (idempotent:
+        # register replaces by entity_type). Core names no plan vocabulary.
+        from vbwd.services.search import search_provider_registry
+        from plugins.subscription.subscription.search_provider import (
+            SubscriptionPlanSearchProvider,
+        )
+
+        search_provider_registry.register(SubscriptionPlanSearchProvider())
+
         # Self-heal: ensure the /checkout/confirmation CMS page exists.
         # The fe-user `checkout` plugin's /checkout/confirmation route loads
         # CmsPage with slug="checkout-confirmation"; if the row is missing,
@@ -401,6 +411,10 @@ class SubscriptionPlugin(BasePlugin):
 
         unregister_entity_type("tarif_plan")
         unregister_entity_type("addon")
+
+        from vbwd.services.search import search_provider_registry
+
+        search_provider_registry.unregister("subscription_plan")
 
         clear_entitlement_provider()
         unregister_invoice_extra_fields_provider("subscription")

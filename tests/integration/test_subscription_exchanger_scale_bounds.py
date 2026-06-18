@@ -18,7 +18,7 @@ subscription --full``.
 """
 from contextlib import contextmanager
 
-from sqlalchemy import event
+from sqlalchemy import event, inspect
 
 from vbwd.models.enums import BillingPeriod
 from vbwd.services.data_exchange.base_model_exchanger import EXPORT_CHUNK_SIZE
@@ -254,6 +254,38 @@ class TestPlansImportSelectBound:
         assert result.created == 0
         assert len(result.errors) == 1
         assert "unknown category_slugs" in result.errors[0]["reason"]
+
+
+class TestCascadeFkIndex:
+    """The plan-link FK columns must be indexed so the plan-delete cascade probes.
+
+    ``subscription_tarif_plan_category_plans`` and ``subscription_addon_tarif_plans``
+    both have ``tarif_plan_id`` as the SECOND PK column, so it has no leading PK
+    index. Without a standalone index the ``ON DELETE CASCADE`` from
+    ``subscription_tarif_plan`` seq-scans each link heap once per deleted plan →
+    O(N²) (the S89 t3 1M-row plan reset hang). Guards that the index is declared
+    on the model so ``create_all`` / fresh installs build it, matching migration
+    ``20260617_sub_link_tarif_plan_id_idx`` for existing DBs.
+    """
+
+    def test_plan_link_tarif_plan_id_is_indexed(self, db):
+        connection = db.session.connection()
+        inspector = inspect(connection)
+        for table_name in (
+            "subscription_tarif_plan_category_plans",
+            "subscription_addon_tarif_plans",
+        ):
+            indexed_columns = {
+                tuple(index["column_names"])
+                for index in inspector.get_indexes(table_name)
+            }
+            assert any(
+                columns and columns[0] == "tarif_plan_id" for columns in indexed_columns
+            ), (
+                f"{table_name}.tarif_plan_id has no supporting index — the "
+                "ON DELETE CASCADE from subscription_tarif_plan will seq-scan "
+                "per row (O(N²))"
+            )
 
 
 class TestPlansResetStatementBound:

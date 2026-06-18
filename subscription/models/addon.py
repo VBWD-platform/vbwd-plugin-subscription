@@ -18,6 +18,12 @@ addon_tarif_plans = db.Table(
         db.UUID,
         db.ForeignKey("subscription_tarif_plan.id", ondelete="CASCADE"),
         primary_key=True,
+        # SECOND column of the composite PK → the PK index can't serve a
+        # ``WHERE tarif_plan_id = ?`` probe, so deleting a plan would seq-scan
+        # this link heap once per deleted plan (O(N²) — the S89 t3 load-test
+        # reset hang; same gap fixed for shop_product_category_link). Mirrored by
+        # migration 20260617_sub_link_tarif_plan_id_idx for existing DBs.
+        index=True,
     ),
 )
 
