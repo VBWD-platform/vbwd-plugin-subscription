@@ -86,7 +86,7 @@ class SubscriptionEntitlementProvider(IEntitlementProvider):
         self, user_id: UUID, feature_name: str, default: Any = None
     ) -> Any:
         # Read a plan-feature value for the user's active (ACTIVE/TRIALING) plan.
-        # Mirrors taro's prior direct read of tarif_plan.features[name].
+        # Mirrors tarot's prior direct read of tarif_plan.features[name].
         subscription = self.subscription_repo.find_active_by_user(user_id)
         if not subscription or not subscription.tarif_plan:
             return default

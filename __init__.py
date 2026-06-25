@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     # only for type checking here; at runtime the bot-storefront methods lazily
     # import the neutral DTOs inside their bodies, so ``subscription`` imports
     # cleanly even when bot-base is absent (no hard dependency, no top-level
-    # ``bot_base`` import). Mirrors plugins/chat and plugins/taro exactly.
+    # ``bot_base`` import). Mirrors plugins/chat and plugins/tarot exactly.
     from plugins.bot_base.bot_base.types import BotCommand, BotInbound, BotReply
 
 

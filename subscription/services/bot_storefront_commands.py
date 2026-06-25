@@ -11,7 +11,7 @@ choices. It depends only on:
 It references **no** transport type and builds replies purely from the neutral
 ``BotReply`` / ``BotChoice`` DTOs (imported lazily by the caller and passed in as
 factories so this module never hard-imports bot-base — the bridge stays
-optional, exactly like the chat/taro consumers).
+optional, exactly like the chat/tarot consumers).
 
 ``action_data`` is namespaced ``"subscription:<action>:<item_id>"`` so the
 bridge routes a tapped choice back to ``handle_action`` here (D7).

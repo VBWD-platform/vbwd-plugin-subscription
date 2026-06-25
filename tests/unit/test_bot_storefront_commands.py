@@ -67,7 +67,7 @@ class TestActionEncoding:
         assert parse_action(action_data) == (ACTION_SELECT_PLAN, "plan-a")
 
     def test_foreign_namespace_is_rejected(self):
-        assert parse_action("taro:draw:1") is None
+        assert parse_action("tarot:draw:1") is None
 
 
 class TestTarifsReply:
