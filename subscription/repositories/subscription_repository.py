@@ -93,13 +93,20 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             .all()
         )
 
-    def find_expired_trials(self) -> List[Subscription]:
-        """Find trialing subscriptions whose trial has ended."""
+    def find_expired_trials(self, now=None) -> List[Subscription]:
+        """Find trialing subscriptions whose trial has ended.
+
+        Args:
+            now: Optional clock; defaults to ``utcnow()``. Injecting it keeps
+                the window deterministic and lets the conversion service share
+                one clock with the query (S103.2b).
+        """
+        cutoff = now or utcnow()
         return (
             self._session.query(Subscription)
             .filter(
                 Subscription.status == SubscriptionStatus.TRIALING,
-                Subscription.trial_end_at <= utcnow(),
+                Subscription.trial_end_at <= cutoff,
             )
             .all()
         )

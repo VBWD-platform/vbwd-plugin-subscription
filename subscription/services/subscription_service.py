@@ -1,5 +1,4 @@
 """Subscription service implementation."""
-from datetime import timedelta
 from vbwd.utils.datetime_utils import utcnow
 from decimal import Decimal
 from typing import Optional, List
@@ -12,17 +11,12 @@ from plugins.subscription.subscription.repositories.tarif_plan_repository import
 )
 from plugins.subscription.subscription.models import Subscription
 from plugins.subscription.subscription.services.lifecycle_events import (
-    EVENT_SUBSCRIPTION_CANCELLED,
     EVENT_SUBSCRIPTION_EXPIRED,
     publish_subscription_event,
 )
-from vbwd.models.invoice import UserInvoice
-from vbwd.models.invoice_line_item import InvoiceLineItem
 from vbwd.models.enums import (
     SubscriptionStatus,
     BillingPeriod,
-    InvoiceStatus,
-    LineItemType,
     TokenTransactionType,
 )
 
@@ -350,60 +344,6 @@ class SubscriptionService:
             self._publish_lifecycle_event(EVENT_SUBSCRIPTION_EXPIRED, subscription)
 
         return expired
-
-    def expire_trials(self, invoice_repo) -> list:
-        """
-        Find and cancel expired trial subscriptions, creating pending invoices.
-
-        Args:
-            invoice_repo: InvoiceRepository for creating invoices
-
-        Returns:
-            List of dicts with subscription_id and invoice_id
-        """
-        expired_trials = self._subscription_repo.find_expired_trials()
-        results = []
-
-        for subscription in expired_trials:
-            subscription.cancel()
-            self._subscription_repo.save(subscription)
-
-            # S69 D5: emit so the trial→cancel scheduler path reconciles perms.
-            self._publish_lifecycle_event(EVENT_SUBSCRIPTION_CANCELLED, subscription)
-
-            plan = subscription.tarif_plan
-            amount = plan.raw_price
-            invoice = UserInvoice()
-            invoice.user_id = subscription.user_id
-            invoice.invoice_number = UserInvoice.generate_invoice_number()
-            invoice.amount = amount
-            # S85.1 (D5): the plan no longer carries a currency; the invoice
-            # keeps the model default (the global operating currency, S84).
-            invoice.status = InvoiceStatus.PENDING
-            invoice.invoiced_at = utcnow()
-            invoice.expires_at = utcnow() + timedelta(days=30)
-            # Link to the subscription via a SUBSCRIPTION line item (the link is
-            # no longer a column on the core invoice).
-            invoice.line_items.append(
-                InvoiceLineItem(
-                    item_type=LineItemType.SUBSCRIPTION,
-                    item_id=subscription.id,
-                    description=plan.name if plan else "Subscription",
-                    quantity=1,
-                    unit_price=amount,
-                    total_price=amount,
-                )
-            )
-            invoice_repo.save(invoice)
-
-            results.append(
-                {
-                    "subscription_id": str(subscription.id),
-                    "invoice_id": str(invoice.id),
-                }
-            )
-
-        return results
 
     def send_dunning_emails(self, event_dispatcher=None) -> list:
         """

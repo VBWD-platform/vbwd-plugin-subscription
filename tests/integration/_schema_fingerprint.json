@@ -214,6 +214,10 @@
         "nullable": true,
         "type": "TIMESTAMP"
       },
+      "payment_method": {
+        "nullable": true,
+        "type": "VARCHAR(50)"
+      },
       "pending_plan_id": {
         "nullable": true,
         "type": "UUID"

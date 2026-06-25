@@ -141,6 +141,9 @@ class CheckoutHandler(IEventHandler):
                     user_id=event.user_id,
                     tarif_plan_id=event.plan_id,
                     status=SubscriptionStatus.PENDING,
+                    # S103.2a: remember the method the user picked so trial-end
+                    # conversion can re-charge the same saved method.
+                    payment_method=event.payment_method_code,
                 )
                 if plan.trial_days and plan.trial_days > 0:
                     subscription.start_trial(plan.trial_days)

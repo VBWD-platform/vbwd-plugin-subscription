@@ -376,6 +376,11 @@ class SubscriptionPlugin(BasePlugin):
                 seed_error,
             )
 
+        # Register the `flask subscription ...` CLI group (cron entrypoint for
+        # the same billing pass the scheduler runs). Runs under TESTING too so
+        # CLI specs can drive the command via the app's test runner.
+        self._register_cli_commands()
+
         # Start scheduler — but never in tests. Each test builds its own app and
         # runs on_enable, so an unguarded scheduler spins up one background
         # thread (and its DB work) per test app, leaking threads/connections
@@ -396,6 +401,26 @@ class SubscriptionPlugin(BasePlugin):
                 logger.warning(
                     "[subscription] Failed to start scheduler: %s", scheduler_error
                 )
+
+    def _register_cli_commands(self) -> None:
+        """Register the plugin's ``flask subscription ...`` CLI group.
+
+        Core declares no subscription command (it stays agnostic); the plugin
+        adds its group to the live app's click group on enable. Guarded so a
+        repeat enable (e.g. per-test app) does not raise on a duplicate name.
+        """
+        import logging
+        from flask import current_app
+
+        try:
+            from plugins.subscription.subscription.cli import subscription_cli
+
+            if "subscription" not in current_app.cli.commands:
+                current_app.cli.add_command(subscription_cli)
+        except Exception as cli_error:  # pragma: no cover — operational guard
+            logging.getLogger(__name__).warning(
+                "[subscription] Failed to register CLI commands: %s", cli_error
+            )
 
     def on_disable(self):
         from vbwd.services.entitlement import clear_entitlement_provider

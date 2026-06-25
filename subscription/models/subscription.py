@@ -53,6 +53,10 @@ class Subscription(BaseModel):
     provider_subscription_id = db.Column(
         db.String(255), unique=True, nullable=True, index=True
     )
+    # S103.2a: the payment-method *code* the user selected at checkout (e.g.
+    # "token_balance"). Trial-end conversion resolves it → the
+    # RecurringChargeProvider plugin to re-charge the saved method off-session.
+    payment_method = db.Column(db.String(50), nullable=True)
 
     # Relationships
     # (Invoices link back via their SUBSCRIPTION line item — item_id == id —
