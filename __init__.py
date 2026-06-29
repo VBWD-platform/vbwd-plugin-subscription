@@ -73,7 +73,7 @@ class SubscriptionPlugin(BasePlugin):
     def metadata(self) -> PluginMetadata:
         return PluginMetadata(
             name="subscription",
-            version="26.6",
+            version="26.6.1",
             author="VBWD",
             description="Subscription management — tarif plans, subscriptions, add-ons, checkout",
             dependencies=["email"],
