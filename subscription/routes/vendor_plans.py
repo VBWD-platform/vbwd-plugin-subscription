@@ -9,7 +9,7 @@ plugin's convention; subscription never imports marketplace.
 import re
 from decimal import Decimal, InvalidOperation
 
-from flask import g, jsonify, request
+from flask import current_app, g, jsonify, request
 
 from vbwd.extensions import db
 from vbwd.middleware.auth import require_auth, require_user_permission
@@ -180,6 +180,18 @@ def vendor_update_plan(plan_id):
         plan.trial_days = int(data["trial_days"])
     if "is_active" in data:
         plan.is_active = bool(data["is_active"])
+    if "features" in data:
+        features = data["features"]
+        if isinstance(features, dict) and "default_tokens" not in features:
+            features["default_tokens"] = 0
+        plan.features = features
+    if "price_display_mode" in data:
+        try:
+            plan.price_display_mode = validate_price_display_mode(
+                data["price_display_mode"]
+            )
+        except ValueError as mode_error:
+            return jsonify({"error": str(mode_error)}), 400
 
     try:
         saved_plan = repository.save(plan)
@@ -209,3 +221,120 @@ def vendor_delete_plan(plan_id):
     repository.delete(plan.id)
     invalidate_plan_cache()
     return jsonify({"success": True}), 200
+
+
+# ── Tags / custom-fields (generic core port, keyed on ``tarif_plan``) ────────
+# Mirrors the shop plugin's vendor tags/custom-fields handlers. Plans have no
+# stock and no images, so only tags + custom-fields are exposed. Vendor and
+# admin route through the SAME core port so they never diverge.
+
+_PLAN_ENTITY_TYPE = "tarif_plan"
+
+
+def _vendor_tags_and_custom_fields():
+    """The core generic tags / custom-fields port (D5/D6 by-id seam)."""
+    return current_app.container.tags_and_custom_fields()
+
+
+@subscription_bp.route(
+    "/api/v1/subscription/vendor/plans/<plan_id>/tags", methods=["GET"]
+)
+@require_auth
+@require_user_permission("marketplace.vendor")
+def vendor_get_plan_tags(plan_id):
+    """Vendor self-service: tag slugs on a plan the vendor owns (else 403)."""
+    disabled = _require_marketplace_enabled()
+    if disabled:
+        return disabled
+
+    _plan, error = _load_owned_plan(TarifPlanRepository(db.session), plan_id)
+    if error:
+        return error
+
+    port = _vendor_tags_and_custom_fields()
+    return jsonify({"tags": port.get_tags(_PLAN_ENTITY_TYPE, plan_id)}), 200
+
+
+@subscription_bp.route(
+    "/api/v1/subscription/vendor/plans/<plan_id>/tags", methods=["PUT"]
+)
+@require_auth
+@require_user_permission("marketplace.vendor")
+def vendor_set_plan_tags(plan_id):
+    """Vendor self-service: replace the full tag set (unknown slugs auto-create)."""
+    disabled = _require_marketplace_enabled()
+    if disabled:
+        return disabled
+
+    _plan, error = _load_owned_plan(TarifPlanRepository(db.session), plan_id)
+    if error:
+        return error
+
+    data = request.get_json() or {}
+    slugs = data.get("tags")
+    if not isinstance(slugs, list):
+        return jsonify({"error": "tags must be a list"}), 400
+
+    port = _vendor_tags_and_custom_fields()
+    port.set_tags(_PLAN_ENTITY_TYPE, plan_id, slugs)
+    return jsonify({"tags": port.get_tags(_PLAN_ENTITY_TYPE, plan_id)}), 200
+
+
+@subscription_bp.route(
+    "/api/v1/subscription/vendor/plans/<plan_id>/custom-fields", methods=["GET"]
+)
+@require_auth
+@require_user_permission("marketplace.vendor")
+def vendor_get_plan_custom_fields(plan_id):
+    """Vendor self-service: custom-field values on a plan the vendor owns."""
+    disabled = _require_marketplace_enabled()
+    if disabled:
+        return disabled
+
+    _plan, error = _load_owned_plan(TarifPlanRepository(db.session), plan_id)
+    if error:
+        return error
+
+    port = _vendor_tags_and_custom_fields()
+    values = port.get_custom_fields(_PLAN_ENTITY_TYPE, plan_id)
+    return jsonify({"custom_fields": values}), 200
+
+
+@subscription_bp.route(
+    "/api/v1/subscription/vendor/plans/<plan_id>/custom-fields", methods=["PUT"]
+)
+@require_auth
+@require_user_permission("marketplace.vendor")
+def vendor_set_plan_custom_fields(plan_id):
+    """Vendor self-service: partial upsert of custom-field values (``None`` clears)."""
+    disabled = _require_marketplace_enabled()
+    if disabled:
+        return disabled
+
+    _plan, error = _load_owned_plan(TarifPlanRepository(db.session), plan_id)
+    if error:
+        return error
+
+    data = request.get_json() or {}
+    values = data.get("custom_fields")
+    if not isinstance(values, dict):
+        return jsonify({"error": "custom_fields must be an object"}), 400
+
+    from vbwd.services.tags_and_custom_fields import (
+        CustomFieldValidationError,
+        UnknownCustomFieldError,
+        UnknownEntityTypeError,
+    )
+
+    port = _vendor_tags_and_custom_fields()
+    try:
+        port.set_custom_fields(_PLAN_ENTITY_TYPE, plan_id, values)
+    except (
+        CustomFieldValidationError,
+        UnknownCustomFieldError,
+        UnknownEntityTypeError,
+    ) as validation_error:
+        return jsonify({"error": str(validation_error)}), 400
+
+    updated = port.get_custom_fields(_PLAN_ENTITY_TYPE, plan_id)
+    return jsonify({"custom_fields": updated}), 200

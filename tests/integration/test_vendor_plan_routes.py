@@ -210,6 +210,94 @@ def test_vendor_update_own_plan(app, db, client, monkeypatch):
     assert plan["is_active"] is False
 
 
+def test_vendor_create_persists_features_and_display_mode(app, db, client, monkeypatch):
+    _enable_marketplace(monkeypatch, True)
+    _owner, token = _make_vendor(app, db, f"v-cfeat-{uuid4().hex[:6]}@example.com")
+
+    body = _plan_body("Feature Plan")
+    body["features"] = ["Priority support", "Unlimited seats"]
+    body["price_display_mode"] = "netto"
+
+    resp = client.post(VENDOR_PLANS_PATH, json=body, headers=_auth(token))
+    assert resp.status_code == 201, resp.get_json()
+    plan = resp.get_json()["plan"]
+    assert plan["features"] == ["Priority support", "Unlimited seats"]
+    assert plan["price_display_mode"] == "netto"
+
+    # Round-trip via GET.
+    fetched = client.get(f"{VENDOR_PLANS_PATH}/{plan['id']}", headers=_auth(token))
+    assert fetched.status_code == 200, fetched.get_json()
+    fetched_plan = fetched.get_json()["plan"]
+    assert fetched_plan["features"] == ["Priority support", "Unlimited seats"]
+    assert fetched_plan["price_display_mode"] == "netto"
+
+
+def test_vendor_create_invalid_display_mode_is_400(app, db, client, monkeypatch):
+    _enable_marketplace(monkeypatch, True)
+    _owner, token = _make_vendor(app, db, f"v-cmode-{uuid4().hex[:6]}@example.com")
+
+    body = _plan_body("Bad Mode")
+    body["price_display_mode"] = "sideways"
+
+    resp = client.post(VENDOR_PLANS_PATH, json=body, headers=_auth(token))
+    assert resp.status_code == 400, resp.get_json()
+
+
+def test_vendor_update_persists_features_and_display_mode(app, db, client, monkeypatch):
+    _enable_marketplace(monkeypatch, True)
+    _owner, token = _make_vendor(app, db, f"v-ufeat-{uuid4().hex[:6]}@example.com")
+    plan_id = _create_plan(client, token, "Old Features")
+
+    resp = client.put(
+        f"{VENDOR_PLANS_PATH}/{plan_id}",
+        json={
+            "features": ["Advanced analytics", "API access"],
+            "price_display_mode": "brutto",
+        },
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.get_json()
+    plan = resp.get_json()["plan"]
+    assert plan["features"] == ["Advanced analytics", "API access"]
+    assert plan["price_display_mode"] == "brutto"
+
+    # Round-trip via GET.
+    fetched = client.get(f"{VENDOR_PLANS_PATH}/{plan_id}", headers=_auth(token))
+    assert fetched.status_code == 200, fetched.get_json()
+    fetched_plan = fetched.get_json()["plan"]
+    assert fetched_plan["features"] == ["Advanced analytics", "API access"]
+    assert fetched_plan["price_display_mode"] == "brutto"
+
+
+def test_vendor_update_invalid_display_mode_is_400(app, db, client, monkeypatch):
+    _enable_marketplace(monkeypatch, True)
+    _owner, token = _make_vendor(app, db, f"v-umode-{uuid4().hex[:6]}@example.com")
+    plan_id = _create_plan(client, token)
+
+    resp = client.put(
+        f"{VENDOR_PLANS_PATH}/{plan_id}",
+        json={"price_display_mode": "sideways"},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 400, resp.get_json()
+
+
+def test_vendor_update_features_on_other_plan_is_403(app, db, client, monkeypatch):
+    _enable_marketplace(monkeypatch, True)
+    _owner, owner_token = _make_vendor(
+        app, db, f"v-ufown-{uuid4().hex[:6]}@example.com"
+    )
+    _other, other_token = _make_vendor(app, db, f"v-ufno-{uuid4().hex[:6]}@example.com")
+    plan_id = _create_plan(client, owner_token)
+
+    resp = client.put(
+        f"{VENDOR_PLANS_PATH}/{plan_id}",
+        json={"features": ["hijacked"]},
+        headers=_auth(other_token),
+    )
+    assert resp.status_code == 403, resp.get_json()
+
+
 def test_vendor_update_invalid_billing_period_is_400(app, db, client, monkeypatch):
     _enable_marketplace(monkeypatch, True)
     _owner, token = _make_vendor(app, db, f"v-updb-{uuid4().hex[:6]}@example.com")
