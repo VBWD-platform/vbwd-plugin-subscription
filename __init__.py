@@ -1,7 +1,7 @@
 """Subscription plugin — plans, subscriptions, add-ons, categories, checkout."""
 from typing import List, Optional, TYPE_CHECKING
 
-from vbwd.plugins.base import BasePlugin, PluginMetadata
+from vbwd.plugins.base import BasePlugin, PluginMetadata, PublicRouteDeclaration
 
 if TYPE_CHECKING:
     # Bot-base is an OPTIONAL bridge (S45 / S53.0 / D1 inversion). It is imported
@@ -27,6 +27,11 @@ DEFAULT_CONFIG = {
     "checkout_link_base_url": "",
     # How long a minted one-time checkout-draft token stays resolvable.
     "checkout_draft_ttl_seconds": 900,
+    # ── marketplace vendor-mode ──────────────────────────────────────────────
+    # When false (default) the self-service vendor plan route returns 403 and
+    # checkout never stamps ``vendor_id`` on the invoice line — classic
+    # admin-only plan behaviour is entirely unchanged.
+    "marketplace_enabled": False,
 }
 
 
@@ -84,6 +89,22 @@ class SubscriptionPlugin(BasePlugin):
         if config:
             merged.update(config)
         super().initialize(merged)
+
+    def declare_public_routes(self) -> PublicRouteDeclaration:
+        """Public subscription-plan / add-on catalog + checkout-draft resolve.
+
+        Pricing pages browse plans and add-ons pre-login; the checkout-draft
+        resolve is keyed by an unguessable token (the token IS the capability).
+        """
+        return PublicRouteDeclaration(
+            read={
+                "/api/v1/tarif-plans": "Public subscription-plan catalog for pricing pages.",
+                "/api/v1/tarif-plans/<slug_or_id>": "Public single subscription-plan detail.",
+                "/api/v1/addons/": "Public subscription add-on catalog for pricing pages.",
+                "/api/v1/addons/<addon_id>": "Public single add-on detail.",
+                "/api/v1/subscription/public/checkout-draft/<token>": "Checkout-draft resolve; token is the key.",
+            },
+        )
 
     def get_blueprint(self):
         from plugins.subscription.subscription.routes import subscription_bp

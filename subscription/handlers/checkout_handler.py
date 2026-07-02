@@ -10,7 +10,11 @@ from vbwd.models.enums import (
     InvoiceStatus,
     LineItemType,
 )
+from plugins.subscription.subscription.constants import VENDOR_ID_KEY
 from plugins.subscription.subscription.models import Subscription
+from plugins.subscription.subscription.services.plugin_config import (
+    marketplace_enabled,
+)
 from vbwd.models.invoice import UserInvoice
 from vbwd.models.invoice_line_item import InvoiceLineItem
 from vbwd.services.invoice_line_item_snapshot import (
@@ -150,6 +154,17 @@ class CheckoutHandler(IEventHandler):
                 repos["subscription"].save(subscription)
 
                 # Add subscription line item
+                subscription_extra_data: Dict[str, Any] = {
+                    "price_breakdown": plan_breakdown
+                }
+                # Vendor-mode (marketplace): stamp the selling vendor's user id
+                # onto the buyer invoice line so the central marketplace plugin
+                # credits the vendor on ``invoice.paid``. Merged (never clobbers
+                # other keys), only for vendor-owned plans, only when vendor-mode
+                # is enabled — subscription stamps a LOCAL literal and never
+                # imports marketplace.
+                if plan.vendor_id is not None and marketplace_enabled():
+                    subscription_extra_data[VENDOR_ID_KEY] = str(plan.vendor_id)
                 line_items_data.append(
                     {
                         "type": LineItemType.SUBSCRIPTION.value,
@@ -158,7 +173,7 @@ class CheckoutHandler(IEventHandler):
                         "unit_price": plan_price,
                         "total_price": plan_price,
                         "tax_fields": plan_tax_fields,
-                        "extra_data": {"price_breakdown": plan_breakdown},
+                        "extra_data": subscription_extra_data,
                     }
                 )
                 total_amount += plan_price

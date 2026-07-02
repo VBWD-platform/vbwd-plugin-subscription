@@ -342,12 +342,26 @@
         "nullable": false,
         "type": "TIMESTAMP"
       },
+      "vendor_id": {
+        "nullable": true,
+        "type": "UUID"
+      },
       "version": {
         "nullable": false,
         "type": "INTEGER"
       }
     },
-    "foreign_keys": [],
+    "foreign_keys": [
+      [
+        [
+          "vendor_id"
+        ],
+        "vbwd_user",
+        [
+          "id"
+        ]
+      ]
+    ],
     "primary_key": [
       "id"
     ]

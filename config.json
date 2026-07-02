@@ -7,5 +7,6 @@
   "proration_enabled": true,
   "bot_storefront_enabled": false,
   "checkout_link_base_url": "",
-  "checkout_draft_ttl_seconds": 900
+  "checkout_draft_ttl_seconds": 900,
+  "marketplace_enabled": false
 }

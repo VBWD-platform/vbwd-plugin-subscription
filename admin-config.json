@@ -85,6 +85,18 @@
           "description": "How long a minted one-time checkout-draft token stays resolvable"
         }
       ]
+    },
+    {
+      "id": "marketplace",
+      "label": "Marketplace",
+      "fields": [
+        {
+          "key": "marketplace_enabled",
+          "label": "Enable Vendor Mode",
+          "component": "checkbox",
+          "description": "Let vendors own tarif plans and credit the vendor on plan purchases (stamps vendor_id on the invoice line)"
+        }
+      ]
     }
   ]
 }

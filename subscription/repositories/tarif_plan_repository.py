@@ -23,6 +23,15 @@ class TarifPlanRepository(BaseRepository[TarifPlan]):
             .all()
         )
 
+    def find_by_vendor(self, vendor_id) -> List[TarifPlan]:
+        """Find all tariff plans owned by a given vendor (vendor-mode)."""
+        return (
+            self._session.query(TarifPlan)
+            .filter(TarifPlan.vendor_id == vendor_id)
+            .order_by(TarifPlan.sort_order)
+            .all()
+        )
+
     def find_recurring(self) -> List[TarifPlan]:
         """Find all recurring tariff plans."""
         from vbwd.models.enums import BillingPeriod

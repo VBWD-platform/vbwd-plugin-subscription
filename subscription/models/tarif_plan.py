@@ -87,6 +87,17 @@ class TarifPlan(BaseModel):
     # override it.
     price_display_mode = db.Column(db.String(8), nullable=True)
 
+    # Vendor-mode (marketplace): the owning vendor's ``vbwd_user`` id. ``NULL`` is
+    # a platform-owned plan (classic behaviour). Indexed for the vendor's "my
+    # plans" filter; ``ON DELETE SET NULL`` reverts a removed vendor's plans to
+    # the platform rather than cascading a catalog delete.
+    vendor_id = db.Column(
+        db.UUID,
+        db.ForeignKey("vbwd_user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Relationships
     subscriptions = db.relationship(
         "Subscription",
@@ -178,6 +189,7 @@ class TarifPlan(BaseModel):
             "categories": self._serialize_categories(),
             "taxes": self._serialize_taxes(),
             "price_display_mode": self.price_display_mode,
+            "vendor_id": str(self.vendor_id) if self.vendor_id else None,
         }
         result["tax_ids"] = [tax["id"] for tax in result["taxes"]]
         return result

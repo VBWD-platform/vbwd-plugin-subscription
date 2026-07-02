@@ -20,4 +20,5 @@ from plugins.subscription.subscription.routes import (  # noqa: F401, E402
     admin_categories,
     admin_user_addons,
     public_checkout_draft,
+    vendor_plans,
 )
