@@ -372,6 +372,28 @@ class SubscriptionPlugin(BasePlugin):
 
         search_provider_registry.register(SubscriptionPlanSearchProvider())
 
+        # Marketplace vendor-listings seam — contribute this vendor's plans to
+        # the marketplace admin "what does this user sell?" aggregation. The soft
+        # import lives HERE (the plugin wiring root, not subscription source) so
+        # subscription's source stays marketplace-free (test_vendor_mode_contract)
+        # AND the per-plugin isolated CI (subscription without marketplace) still
+        # enables.
+        try:
+            from plugins.marketplace.marketplace.services import (
+                vendor_listings_registry as marketplace_listings_registry,
+            )
+        except ImportError:
+            marketplace_listings_registry = None
+        if marketplace_listings_registry is not None:
+            from plugins.subscription.subscription.marketplace_listings import (
+                SUBSCRIPTION_LISTING_TYPE_ID,
+                vendor_listings_provider,
+            )
+
+            marketplace_listings_registry.register_vendor_listings_provider(
+                SUBSCRIPTION_LISTING_TYPE_ID, vendor_listings_provider
+            )
+
         # Self-heal: ensure the /checkout/confirmation CMS page exists.
         # The fe-user `checkout` plugin's /checkout/confirmation route loads
         # CmsPage with slug="checkout-confirmation"; if the row is missing,
@@ -461,6 +483,23 @@ class SubscriptionPlugin(BasePlugin):
         from vbwd.services.search import search_provider_registry
 
         search_provider_registry.unregister("subscription_plan")
+
+        # Mirror of the on_enable registration — guarded soft import so the
+        # source stays marketplace-free and disable is safe when absent.
+        try:
+            from plugins.marketplace.marketplace.services import (
+                vendor_listings_registry as marketplace_listings_registry,
+            )
+        except ImportError:
+            marketplace_listings_registry = None
+        if marketplace_listings_registry is not None:
+            from plugins.subscription.subscription.marketplace_listings import (
+                SUBSCRIPTION_LISTING_TYPE_ID,
+            )
+
+            marketplace_listings_registry.unregister_vendor_listings_provider(
+                SUBSCRIPTION_LISTING_TYPE_ID
+            )
 
         clear_entitlement_provider()
         unregister_invoice_extra_fields_provider("subscription")
