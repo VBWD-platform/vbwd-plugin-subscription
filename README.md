@@ -36,7 +36,11 @@ plugin that plugs into the agnostic VBWD core through a set of well-defined
 - **Lifecycle**: trials, activation, expiry, cancellation, renewal, dunning —
   driven by a background scheduler and by payment-provider webhooks.
 - **Entitlements & access levels**: an active subscription grants the plan's
-  entitlements and (via the EventBus) auto-assigns access levels.
+  entitlements and (via the EventBus) auto-assigns access levels — both a
+  plan-linked level (`linked_plan_slug`) and any levels named in the plan's
+  **Features field** via an `access_levels: premium, vip` line (the *automatic
+  access-level switch*), revoked overlap-safe on cancel. See
+  [ARCHITECTURE §9](docs/ARCHITECTURE.md#9-entitlements--access-levels).
 - **Recurring billing**: declares which line items are recurring so payment
   providers (stripe/paypal/yookassa) can set up subscriptions generically.
 

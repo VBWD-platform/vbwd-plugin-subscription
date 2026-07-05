@@ -239,6 +239,21 @@ def cancel_subscription(subscription_id: str):
     if not result.success:
         return jsonify({"error": result.error}), 400
 
+    # S69 D5: the user cancel path used to emit no event, so the permission /
+    # group / access-level reconcilers never ran (feature-declared access levels
+    # persisted after cancel). Publish the lifecycle fact via the shared helper
+    # (same payload shape as the admin path — DRY) so every consumer reconciles.
+    from plugins.subscription.subscription.services.lifecycle_events import (
+        EVENT_SUBSCRIPTION_CANCELLED,
+        publish_subscription_event,
+    )
+
+    publish_subscription_event(
+        EVENT_SUBSCRIPTION_CANCELLED,
+        result.subscription,
+        result.subscription.user_id,
+    )
+
     return (
         jsonify(
             {

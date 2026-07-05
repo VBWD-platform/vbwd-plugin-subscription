@@ -112,8 +112,8 @@ Everything `on_enable` registers, and the core module that owns each seam:
 | `vbwd.events.line_item_registry` | `handlers/line_item_handler.py` | activate/reverse/restore `SUBSCRIPTION` + `ADD_ON` lines; recurring info |
 | event dispatcher `checkout.requested` | `handlers/checkout_handler.py` | build subscription/add-on rows + invoice from a checkout request |
 | event dispatcher `subscription.cancelled` | `handlers/cancel_handler.py` | downstream cancellation side-effects |
-| `vbwd.events.bus` `subscription.activated` | `handlers/subscription_handlers.py`, `handlers/access_level_handler.py` | receipts + access-level auto-assign |
-| `vbwd.events.bus` `subscription.cancelled` | `handlers/access_level_handler.py` | revoke access level |
+| `vbwd.events.bus` `subscription.activated` | `handlers/subscription_handlers.py`, `handlers/access_level_handler.py` (+ `services/plan_feature_access_level_service.py`) | receipts + access-level auto-assign (plan-linked **and** `plan.features["access_levels"]`) |
+| `vbwd.events.bus` `subscription.cancelled` | `handlers/access_level_handler.py` (+ `services/plan_feature_access_level_service.py`) | revoke access levels (overlap-safe for feature-declared levels) |
 | `vbwd.services.entitlement` | `services/subscription_entitlement_provider.py` | what an active subscription grants |
 | `vbwd.services.subscription_read_model` | `services/subscription_read_model.py` | read-only subscription queries for core (e.g. user-deletion count) |
 | `vbwd.services.catalog_read_model` | `services/catalog_read_model.py` | read-only catalog queries for core |
@@ -192,9 +192,45 @@ Two independent seams keep payment plugins subscription-agnostic:
 - `SubscriptionEntitlementProvider` answers core's entitlement queries — what an
   active subscription unlocks (feature flags / token grants from `plan.features`).
 - `SubscriptionAccessLevelHandler` listens on the EventBus and assigns/revokes a
-  user's access level when a subscription activates/cancels. Access-level → plan
-  linkage is surfaced in fe-admin via the `linked_plan_slug` field (see the
-  fe-admin plugin docs).
+  user's access levels when a subscription activates/cancels. There are **two
+  independent sources**, both applied by the same handler on `subscription.activated`
+  / `subscription.cancelled`:
+
+  1. **Plan-linked level** — an `AccessLevel` whose `linked_plan_slug` matches the
+     plan's slug. One level per plan; the linkage lives on the access-level record
+     and is surfaced in fe-admin via the `linked_plan_slug` field.
+
+  2. **Feature-declared levels (the automatic access-level switch)** — access
+     levels named directly in the **plan's Features field**. An admin adds one
+     line to *Features (one per line)*:
+
+     ```
+     access_levels: premium, vip
+     ```
+
+     which the fe-admin parser stores as `plan.features == {"access_levels": "premium, vip"}`.
+     On activation the user is granted every named access level (looked up by
+     slug); on **cancellation or expiry** each is revoked **overlap-safe** — a
+     level is kept if any *other* still-active plan of the user also declares it.
+     The named access levels must already exist as `vbwd_access_level` records.
+     All other Features lines remain plain display bullets.
+
+  The handler's end-of-subscription revoke (`on_subscription_ended`) is
+  subscribed to **both** `subscription.cancelled` and `subscription.expired`, and
+  the user-facing cancel route publishes `subscription.cancelled` (like the admin
+  route) so a user-initiated cancel actually triggers the revoke.
+
+  `PlanFeatureAccessLevelService`
+  (`services/plan_feature_access_level_service.py`) owns the parse + grant +
+  overlap-safe revoke for source #2; the handler delegates to it and commits its
+  own session. Both sources reach core only through the agnostic
+  `UserAccessLevelService` (`find_by_slug` / `assign` / `revoke`).
+
+> **Provenance caveat:** grants go through the shared user↔access-level
+> association, which carries no per-source provenance. If an admin *manually*
+> assigns a level that a plan also declares, cancelling that plan (with no other
+> active plan declaring the level) will revoke the manual grant too. This matches
+> the existing `linked_plan_slug` revoke behavior.
 
 ## 10. Permissions
 

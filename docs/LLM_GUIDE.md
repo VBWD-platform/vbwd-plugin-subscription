@@ -36,7 +36,8 @@ Compact, machine-oriented map for agents editing this plugin. Pair with
 | Build invoice from a checkout request | `subscription/handlers/checkout_handler.py` |
 | Cancellation side-effects | `subscription/handlers/cancel_handler.py` |
 | Receipts on activation | `subscription/handlers/subscription_handlers.py` |
-| Access-level assign/revoke | `subscription/handlers/access_level_handler.py` |
+| Access-level assign/revoke (plan-linked + feature-declared) | `subscription/handlers/access_level_handler.py` |
+| Parse `plan.features["access_levels"]` → grant/overlap-safe revoke | `subscription/services/plan_feature_access_level_service.py` |
 | What a subscription grants | `subscription/services/subscription_entitlement_provider.py` |
 | Read-only queries for core | `subscription/services/{subscription_read_model,catalog_read_model}.py` |
 | Plan/period math, token credit rules | `subscription/services/subscription_service.py` |

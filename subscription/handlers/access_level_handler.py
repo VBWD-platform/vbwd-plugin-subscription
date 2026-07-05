@@ -20,7 +20,14 @@ class SubscriptionAccessLevelHandler:
     """
 
     def on_subscription_activated(self, event_name: str, payload: dict) -> None:
-        """Handle subscription.activated: assign the plan-linked access level."""
+        """Handle subscription.activated: assign access levels.
+
+        Two independent sources are granted:
+        1. the access level linked to the plan via ``linked_plan_slug`` (legacy);
+        2. every access level the plan declares in its Features field
+           (``access_levels: premium, vip``) — this ALWAYS runs, even when the
+           plan has no ``linked_plan_slug`` level (the former early-return case).
+        """
         user_id_str = payload.get("user_id")
         plan_slug = payload.get("plan_slug")
         if not user_id_str or not plan_slug:
@@ -37,30 +44,40 @@ class SubscriptionAccessLevelHandler:
             service = UserAccessLevelService()
             user_id = UUID(user_id_str)
 
-            # Find access level linked to this plan
+            # 1) Plan-linked access level (legacy ``linked_plan_slug``).
             level = service.find_by_linked_plan_slug(plan_slug)
-            if not level:
+            if level:
+                service.assign(user_id, level.id)
+                logger.info(
+                    "[access-level] Assigned level '%s' to user %s (plan: %s)",
+                    level.slug,
+                    user_id_str,
+                    plan_slug,
+                )
+            else:
                 logger.debug(
                     "[access-level] No access level linked to plan '%s'",
                     plan_slug,
                 )
-                return
 
-            service.assign(user_id, level.id)
-            logger.info(
-                "[access-level] Assigned level '%s' to user %s (plan: %s)",
-                level.slug,
-                user_id_str,
-                plan_slug,
-            )
+            # 2) Features-declared access levels — always runs.
+            self._plan_feature_service().grant_for_plan(user_id, payload.get("plan_id"))
+
+            self._commit()
 
         except Exception as error:
             logger.warning(
                 "[access-level] Failed to assign level on activation: %s", error
             )
 
-    def on_subscription_cancelled(self, event_name: str, payload: dict) -> None:
-        """Handle subscription.cancelled: revoke plan-linked level, assign fallback."""
+    def on_subscription_ended(self, event_name: str, payload: dict) -> None:
+        """Handle end-of-subscription (cancelled OR expired): revoke levels.
+
+        Both ``subscription.cancelled`` and ``subscription.expired`` carry the
+        same ``{user_id, plan_id, plan_slug, ...}`` payload (built by
+        ``publish_subscription_event``), so a single revoke path serves both.
+        Revocation is overlap-safe against the user's OTHER still-active plans.
+        """
         user_id_str = payload.get("user_id")
         plan_slug = payload.get("plan_slug")
         if not user_id_str or not plan_slug:
@@ -99,5 +116,36 @@ class SubscriptionAccessLevelHandler:
                         FALLBACK_LEVEL_SLUG,
                     )
 
+            # Revoke Features-declared access levels — overlap-safe against the
+            # user's OTHER still-active plans.
+            self._plan_feature_service().revoke_for_cancelled_plan(
+                user_id, payload.get("plan_id")
+            )
+
+            self._commit()
+
         except Exception as error:
             logger.warning("[access-level] Failed to handle cancellation: %s", error)
+
+    def on_subscription_cancelled(self, event_name: str, payload: dict) -> None:
+        """Back-compat alias for ``subscription.cancelled`` (delegates to the
+        neutral end-of-subscription revoke path)."""
+        self.on_subscription_ended(event_name, payload)
+
+    def _plan_feature_service(self):
+        from plugins.subscription.subscription.services.plan_feature_access_level_service import (  # noqa: E501
+            PlanFeatureAccessLevelService,
+        )
+
+        return PlanFeatureAccessLevelService()
+
+    def _commit(self) -> None:
+        """Commit this handler's own writes.
+
+        The handler runs in an EventBus callback (invoice.paid → activate); the
+        request teardown rolls back a flush-only session, so plugin writes must
+        be committed here (mirrors ``PermissionSyncHandler``).
+        """
+        from vbwd.extensions import db
+
+        db.session.commit()

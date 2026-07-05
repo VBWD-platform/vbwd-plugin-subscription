@@ -556,10 +556,17 @@ class SubscriptionPlugin(BasePlugin):
                 "subscription.activated",
                 access_level_handler.on_subscription_activated,
             )
-            event_bus.subscribe(
+            # Both end-of-subscription facts revoke the feature-declared access
+            # levels via the same neutral path. ``expired`` was previously
+            # unsubscribed, so lapsed subscriptions kept their levels.
+            for ended_event_name in (
                 "subscription.cancelled",
-                access_level_handler.on_subscription_cancelled,
-            )
+                "subscription.expired",
+            ):
+                event_bus.subscribe(
+                    ended_event_name,
+                    access_level_handler.on_subscription_ended,
+                )
             logger.info("[subscription] Access level handlers registered")
         except Exception as error:
             logger.warning(
