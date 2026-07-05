@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vbwd-plugin-subscription"
+version = "26.6.1"
+description = "VBWD backend plugin: subscription"
+requires-python = ">=3.11"
+license = { text = "BSL-1.1" }
+dependencies = []
+
+# Runtime lives inside the vbwd-backend host, which provides `vbwd.*` (core) and
+# any sibling plugins declared in PluginMetadata.dependencies. Those are NOT pinned
+# here so the wheel stays host-agnostic; install the host separately.
+
+[tool.setuptools]
+# The repo root IS the plugins/subscription/ directory; remap it so the wheel exposes
+# the `plugins.subscription` package that runtime imports (e.g. `from plugins.subscription...`).
+package-dir = { "plugins.subscription" = "." }
+packages = [
+    "plugins.subscription",
+    "plugins.subscription.subscription",
+    "plugins.subscription.subscription.handlers",
+    "plugins.subscription.subscription.models",
+    "plugins.subscription.subscription.repositories",
+    "plugins.subscription.subscription.routes",
+    "plugins.subscription.subscription.services",
+    "plugins.subscription.subscription.services.data_exchange",
+]
+
+[tool.setuptools.package-data]
+# Ship everything a pip-installed plugin needs to be self-complete: config JSON,
+# Alembic migrations (the shared backend env.py resolves version_locations from
+# the installed package path), seed scripts, and bin/ helpers.
+"plugins.subscription" = [
+    "*.json",
+    "migrations/*.py",
+    "migrations/*.mako",
+    "migrations/*.ini",
+    "migrations/**/*.py",
+    "migrations/**/*.mako",
+    "populate_db.py",
+    "populate_*.py",
+    "demo_seed.py",
+    "bin/*",
+    "bin/**/*",
+]
