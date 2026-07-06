@@ -108,8 +108,14 @@ def _ensure_subscription_enabled(flask_app) -> None:
                 # A dependency (e.g. the email plugin) may be absent in this
                 # environment. on_enable()'s DI-provider registration doesn't
                 # need it, so enable directly to keep the regression guard valid.
+                # The dependency gate short-circuits enable_plugin() BEFORE it
+                # wires runtime handlers, so mirror that step here — otherwise
+                # the subscription.cancelled/expired handlers stay unsubscribed
+                # and the access-level revoke tests that drive the real event
+                # bus silently no-op (green locally where email is present).
                 if plugin.status == PluginStatus.INITIALIZED:
                     plugin.enable()
+                    manager._wire_runtime_handlers(plugin)
 
 
 @pytest.fixture
