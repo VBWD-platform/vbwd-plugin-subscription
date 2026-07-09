@@ -1,6 +1,5 @@
 """Admin tariff plan management routes."""
 import re
-from vbwd.utils.datetime_utils import utcnow
 from flask import jsonify, request
 from decimal import Decimal
 from sqlalchemy import func
@@ -10,6 +9,9 @@ from plugins.subscription.subscription.repositories.tarif_plan_repository import
 )
 from plugins.subscription.subscription.repositories.subscription_repository import (
     SubscriptionRepository,
+)
+from plugins.subscription.subscription.services.tarif_plan_service import (
+    TarifPlanService,
 )
 from vbwd.extensions import db
 from vbwd.models.tax import Tax
@@ -384,6 +386,10 @@ def admin_copy_plan(plan_id):
     """
     Create a copy of an existing tariff plan.
 
+    The copy is always inactive, re-points the source's tax / category / add-on
+    links, and never carries the source's user subscriptions. See
+    ``TarifPlanService.copy_plan`` for the full contract.
+
     Args:
         plan_id: UUID of the source plan
 
@@ -391,34 +397,55 @@ def admin_copy_plan(plan_id):
         201: New plan created
         404: Source plan not found
     """
-    plan_repo = TarifPlanRepository(db.session)
-    source_plan = plan_repo.find_by_id(plan_id)
+    service = TarifPlanService(TarifPlanRepository(db.session))
+    new_plan = service.copy_plan(plan_id)
 
-    if not source_plan:
+    if new_plan is None:
         return jsonify({"error": "Plan not found"}), 404
 
-    # Create a copy with "(Copy)" appended to the name
-    # Generate a unique slug for the copy
-    base_slug = source_plan.slug or re.sub(
-        r"[^a-z0-9]+", "-", source_plan.name.lower()
-    ).strip("-")
-    new_slug = f"{base_slug}-copy-{utcnow().strftime('%Y%m%d%H%M%S')}"
-
-    new_plan = TarifPlan(
-        name=f"{source_plan.name} (Copy)",
-        slug=new_slug,
-        description=source_plan.description,
-        price=source_plan.price,
-        billing_period=source_plan.billing_period,
-        features=source_plan.features,
-        trial_days=source_plan.trial_days,
-        is_active=True,  # New copy is active by default
-    )
-
-    saved_plan = plan_repo.save(new_plan)
     invalidate_plan_cache()
 
     return (
-        jsonify({"plan": saved_plan.to_dict(), "message": "Plan copied successfully"}),
+        jsonify({"plan": new_plan.to_dict(), "message": "Plan copied successfully"}),
+        201,
+    )
+
+
+@subscription_bp.route("/api/v1/admin/tarif-plans/bulk/copy", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("subscription.plans.manage")
+def admin_bulk_copy_plans():
+    """
+    Copy several tariff plans in one request.
+
+    Body:
+        - ids: list[str] — source plan UUIDs. Unknown ids are skipped, not fatal.
+
+    Each created copy follows the same contract as the per-item ``/copy`` route.
+
+    Returns:
+        201: ``{"plans": [...], "count": N}`` — every created copy.
+    """
+    data = request.get_json() or {}
+    plan_ids = data.get("ids", []) or []
+
+    service = TarifPlanService(TarifPlanRepository(db.session))
+    created_plans = []
+    for plan_id in plan_ids:
+        new_plan = service.copy_plan(plan_id)
+        if new_plan is not None:
+            created_plans.append(new_plan.to_dict())
+
+    invalidate_plan_cache()
+
+    return (
+        jsonify(
+            {
+                "plans": created_plans,
+                "count": len(created_plans),
+                "message": "Plans copied successfully",
+            }
+        ),
         201,
     )

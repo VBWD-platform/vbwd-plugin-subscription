@@ -7,6 +7,11 @@ from plugins.subscription.subscription.repositories.tarif_plan_repository import
     TarifPlanRepository,
 )
 from plugins.subscription.subscription.models import TarifPlan
+from plugins.subscription.subscription.services.copy_helpers import (
+    COPY_NAME_SUFFIX,
+    next_available_copy_slug,
+    slugify,
+)
 
 
 class TarifPlanService:
@@ -104,6 +109,52 @@ class TarifPlanService:
             ],
             "price": price.to_dict(),
         }
+
+    def copy_plan(self, plan_id) -> Optional[TarifPlan]:
+        """Duplicate a tariff plan, returning the persisted copy (or ``None``).
+
+        The copy is always inactive, gets a fresh id/timestamps and a unique
+        ``<base>-copy[-N]`` slug, and its name gains a ``(Copy)`` suffix. The
+        M2M links (taxes, categories, add-on bindings) are RE-POINTED at the
+        same rows — never duplicated. User subscriptions are transactions and
+        are deliberately NOT copied. Returns ``None`` when the source is gone
+        so the caller can map it to a 404 / skip it in a bulk request.
+        """
+        source_plan = self._tarif_plan_repo.find_by_id(plan_id)
+        if source_plan is None:
+            return None
+
+        base_slug = source_plan.slug or slugify(source_plan.name)
+        new_plan = TarifPlan(
+            name=f"{source_plan.name}{COPY_NAME_SUFFIX}",
+            slug=next_available_copy_slug(
+                base_slug,
+                lambda candidate: self._tarif_plan_repo.find_by_slug(candidate)
+                is not None,
+            ),
+            description=source_plan.description,
+            price=source_plan.price,
+            billing_period=source_plan.billing_period,
+            features=source_plan.features,
+            trial_days=source_plan.trial_days,
+            is_active=False,
+            sort_order=source_plan.sort_order,
+            price_display_mode=source_plan.price_display_mode,
+            vendor_id=source_plan.vendor_id,
+        )
+        # Persist the copy first so it is session-bound before its M2M links are
+        # wired (assigning collections/backrefs to a transient row otherwise
+        # emits a "not in session" warning).
+        saved_plan = self._tarif_plan_repo.save(new_plan)
+
+        # Re-point M2M links at the SAME rows (no duplication of the linked
+        # taxes / categories / add-ons, and the source keeps its own links).
+        saved_plan.taxes = list(source_plan.taxes)
+        saved_plan.categories = list(source_plan.categories)
+        for addon in list(source_plan.addons):
+            addon.tarif_plans.append(saved_plan)
+
+        return self._tarif_plan_repo.save(saved_plan)
 
     def get_active_plans(self) -> List[TarifPlan]:
         """Get all active tariff plans.

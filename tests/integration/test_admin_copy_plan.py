@@ -69,6 +69,8 @@ def test_copy_plan_appends_capital_copy_suffix(db, client, monkeypatch):
     copied = resp.get_json()["plan"]
     assert copied["name"] == "Pro (Copy)"
     assert copied["slug"] != source_plan.slug
+    # A copy is never live — copies always start inactive (product decision).
+    assert copied["is_active"] is False
 
     from plugins.subscription.subscription.models.tarif_plan import TarifPlan
 

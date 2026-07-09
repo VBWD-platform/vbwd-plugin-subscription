@@ -6,6 +6,7 @@ from vbwd.middleware.auth import require_auth, require_admin, require_permission
 from plugins.subscription.subscription.repositories.addon_repository import (
     AddOnRepository,
 )
+from plugins.subscription.subscription.services.addon_service import AddOnService
 from vbwd.extensions import db
 from plugins.subscription.subscription.models import AddOn
 from plugins.subscription.subscription.models import TarifPlan
@@ -156,6 +157,49 @@ def admin_create_addon():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+
+@subscription_bp.route("/api/v1/admin/addons/bulk/copy", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("subscription.addons.manage")
+def admin_bulk_copy_addons():
+    """
+    Copy several add-ons in one request.
+
+    Body:
+        - ids: list[str] — source add-on UUIDs. Unknown ids are skipped, not
+          fatal.
+
+    Each created copy is inactive, gets a unique ``<base>-copy[-N]`` slug and a
+    ``(Copy)`` name suffix, and re-points the source's tax / plan links. See
+    ``AddOnService.copy_addon`` for the full contract.
+
+    Returns:
+        201: ``{"addons": [...], "count": N}`` — every created copy.
+    """
+    data = request.get_json() or {}
+    addon_ids = data.get("ids", []) or []
+
+    service = AddOnService(AddOnRepository(db.session))
+    created_addons = []
+    for addon_id in addon_ids:
+        new_addon = service.copy_addon(addon_id)
+        if new_addon is not None:
+            created_addons.append(new_addon.to_dict())
+
+    invalidate_addon_cache()
+
+    return (
+        jsonify(
+            {
+                "addons": created_addons,
+                "count": len(created_addons),
+                "message": "Add-ons copied successfully",
+            }
+        ),
+        201,
+    )
 
 
 @subscription_bp.route("/api/v1/admin/addons/<addon_id>", methods=["GET"])
