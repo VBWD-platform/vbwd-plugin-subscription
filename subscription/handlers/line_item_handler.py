@@ -134,7 +134,9 @@ class SubscriptionLineItemHandler(ILineItemHandler):
             plan = subscription.tarif_plan if subscription else None
             if plan and plan.is_recurring:
                 return RecurringBillingSpec(
-                    name=plan.name, billing_period=plan.billing_period.value
+                    name=plan.name,
+                    billing_period=plan.billing_period.value,
+                    trial_days=int(plan.trial_days or 0),
                 )
             return None
         if line_item.item_type == LineItemType.ADD_ON:
@@ -142,7 +144,9 @@ class SubscriptionLineItemHandler(ILineItemHandler):
             addon = addon_subscription.addon if addon_subscription else None
             if addon and addon.is_recurring:
                 return RecurringBillingSpec(
-                    name=addon.name, billing_period=addon.billing_period
+                    name=addon.name,
+                    billing_period=addon.billing_period,
+                    trial_days=int(getattr(addon, "trial_days", 0) or 0),
                 )
             return None
         return None

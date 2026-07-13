@@ -94,7 +94,12 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         )
 
     def find_expired_trials(self, now=None) -> List[Subscription]:
-        """Find trialing subscriptions whose trial has ended.
+        """Find platform-managed trialing subscriptions whose trial has ended.
+
+        Provider-managed trials (native Stripe/PayPal subscriptions, identified
+        by ``provider_subscription_id``) are excluded: the provider fires the
+        first charge itself via webhook, so the platform's run-billing must not
+        also process them or it would double-charge / wrongly cancel.
 
         Args:
             now: Optional clock; defaults to ``utcnow()``. Injecting it keeps
@@ -107,6 +112,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             .filter(
                 Subscription.status == SubscriptionStatus.TRIALING,
                 Subscription.trial_end_at <= cutoff,
+                Subscription.provider_subscription_id.is_(None),
             )
             .all()
         )

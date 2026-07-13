@@ -34,6 +34,7 @@ def test_ghrm_recurring_plan_subscription_is_recurring(mock_db):
         name="GHRM Backend",
         is_recurring=True,
         billing_period=SimpleNamespace(value="MONTHLY"),
+        trial_days=0,
     )
     mock_db.session.get.return_value = SimpleNamespace(tarif_plan=plan)
     handler = _handler()
@@ -43,6 +44,40 @@ def test_ghrm_recurring_plan_subscription_is_recurring(mock_db):
     assert handler.recurring_billing_spec(item) == RecurringBillingSpec(
         name="GHRM Backend", billing_period="MONTHLY"
     )
+
+
+@patch("vbwd.extensions.db")
+def test_subscription_spec_carries_plan_trial_days(mock_db):
+    """A plan with a trial period forwards trial_days so the provider defers cycle 1."""
+    plan = SimpleNamespace(
+        name="Trial Plan",
+        is_recurring=True,
+        billing_period=SimpleNamespace(value="MONTHLY"),
+        trial_days=14,
+    )
+    mock_db.session.get.return_value = SimpleNamespace(tarif_plan=plan)
+    handler = _handler()
+    item = _line_item(LineItemType.SUBSCRIPTION)
+
+    spec = handler.recurring_billing_spec(item)
+    assert spec == RecurringBillingSpec(
+        name="Trial Plan", billing_period="MONTHLY", trial_days=14
+    )
+    assert spec.trial_days == 14
+
+
+@patch("vbwd.extensions.db")
+def test_addon_spec_defaults_trial_days_to_zero(mock_db):
+    """Add-ons have no trial field → trial_days defaults to 0."""
+    addon = SimpleNamespace(
+        name="Priority Support", is_recurring=True, billing_period="MONTHLY"
+    )
+    mock_db.session.get.return_value = SimpleNamespace(addon=addon)
+    handler = _handler()
+    item = _line_item(LineItemType.ADD_ON)
+
+    spec = handler.recurring_billing_spec(item)
+    assert spec.trial_days == 0
 
 
 @patch("vbwd.extensions.db")

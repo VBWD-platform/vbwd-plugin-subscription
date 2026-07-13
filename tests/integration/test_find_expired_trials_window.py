@@ -17,7 +17,7 @@ from plugins.subscription.subscription.repositories.subscription_repository impo
 )
 
 
-def _make_trial(db, trial_end_at):
+def _make_trial(db, trial_end_at, provider_subscription_id=None):
     user = User(email=f"trial-{uuid4().hex}@example.com", password_hash="x")
     plan = TarifPlan(
         name="Trial Plan",
@@ -33,6 +33,7 @@ def _make_trial(db, trial_end_at):
         tarif_plan_id=plan.id,
         status=SubscriptionStatus.TRIALING,
         trial_end_at=trial_end_at,
+        provider_subscription_id=provider_subscription_id,
     )
     db.session.add(subscription)
     db.session.flush()
@@ -60,3 +61,24 @@ def test_find_expired_trials_defaults_to_utcnow(db):
     repo = SubscriptionRepository(db.session)
     found_ids = {str(s.id) for s in repo.find_expired_trials()}
     assert str(past.id) in found_ids
+
+
+def test_find_expired_trials_excludes_provider_managed_trials(db):
+    """Provider-owned trials (native Stripe/PayPal sub) fire cycle 1 themselves.
+
+    The platform's run-billing must NOT also process them, else double charge.
+    """
+    now = utcnow()
+    platform_trial = _make_trial(db, trial_end_at=now - timedelta(hours=1))
+    provider_trial = _make_trial(
+        db,
+        trial_end_at=now - timedelta(hours=1),
+        provider_subscription_id="sub_stripe_123",
+    )
+    db.session.commit()
+
+    repo = SubscriptionRepository(db.session)
+    found_ids = {str(s.id) for s in repo.find_expired_trials(now=now)}
+
+    assert str(platform_trial.id) in found_ids
+    assert str(provider_trial.id) not in found_ids
