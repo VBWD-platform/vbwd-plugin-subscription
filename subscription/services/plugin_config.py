@@ -23,3 +23,8 @@ def subscription_config() -> Dict[str, Any]:
 def marketplace_enabled() -> bool:
     """Whether vendor-mode (self-service vendor routes + checkout stamp) is on."""
     return bool(subscription_config().get("marketplace_enabled", False))
+
+
+def dashboard_plans_widget_slug() -> str:
+    """Slug of the TariffPlanCollection CMS widget for the user dashboard plans page."""
+    return str(subscription_config().get("dashboard_plans_widget_slug", "") or "")

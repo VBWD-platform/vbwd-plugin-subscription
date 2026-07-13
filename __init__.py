@@ -32,6 +32,11 @@ DEFAULT_CONFIG = {
     # checkout never stamps ``vendor_id`` on the invoice line — classic
     # admin-only plan behaviour is entirely unchanged.
     "marketplace_enabled": False,
+    # ── fe-user dashboard plans widget ───────────────────────────────────────
+    # Slug of the TariffPlanCollection CMS widget rendered on the user's
+    # /dashboard/plans page. Empty (default) => the page falls back to the
+    # widget's default "all plans" mode, preserving classic behaviour.
+    "dashboard_plans_widget_slug": "",
 }
 
 

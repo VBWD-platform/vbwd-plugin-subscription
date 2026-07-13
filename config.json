@@ -8,5 +8,6 @@
   "bot_storefront_enabled": false,
   "checkout_link_base_url": "",
   "checkout_draft_ttl_seconds": 900,
-  "marketplace_enabled": false
+  "marketplace_enabled": false,
+  "dashboard_plans_widget_slug": ""
 }

@@ -330,11 +330,7 @@ def admin_get_subscription(subscription_id):
     user = user_repo.find_by_id(str(subscription.user_id))
     if user:
         sub_dict["user_email"] = user.email
-        sub_dict["user_name"] = (
-            (user.details.first_name + " " + user.details.last_name).strip()
-            if user.details
-            else ""
-        )
+        sub_dict["user_name"] = user.details.full_name if user.details else ""
 
     # Enrich with plan info
     plan = plan_repo.find_by_id(str(subscription.tarif_plan_id))

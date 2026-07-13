@@ -97,6 +97,19 @@
           "description": "Let vendors own tarif plans and credit the vendor on plan purchases (stamps vendor_id on the invoice line)"
         }
       ]
+    },
+    {
+      "id": "dashboard",
+      "label": "Dashboard",
+      "fields": [
+        {
+          "key": "dashboard_plans_widget_slug",
+          "label": "User's default tarif plan category in dashboard",
+          "component": "input",
+          "inputType": "text",
+          "description": "Slug of the TariffPlanCollection CMS widget shown on the user's /dashboard/plans page. Create the widget in CMS → Widgets, then paste its slug here."
+        }
+      ]
     }
   ]
 }
