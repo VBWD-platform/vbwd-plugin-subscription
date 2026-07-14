@@ -164,7 +164,16 @@ class TarifPlan(BaseModel):
 
     @property
     def is_recurring(self) -> bool:
-        """Check if this is a recurring subscription plan."""
+        """Check if this is a recurring subscription plan.
+
+        A plan with no billing period is NOT recurring. Guarding ``None`` here
+        avoids the ``None != BillingPeriod.ONE_TIME`` truthiness trap that let a
+        spec-less plan be reported recurring (so the payment mode-check chose
+        ``mode=subscription``) while ``recurring_billing_spec`` raised on
+        ``None.value`` — the divergence that produced empty Stripe line_items.
+        """
+        if self.billing_period is None:
+            return False
         return self.billing_period != BillingPeriod.ONE_TIME
 
     def to_dict(self) -> dict:
