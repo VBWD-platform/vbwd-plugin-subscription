@@ -334,6 +334,22 @@ class SubscriptionPlugin(BasePlugin):
         register_subscription_frontend_event_types()
         logger.info("[subscription] Frontend event types registered")
 
+        # Seat-count + token-balance provisioning policy. Core owns the veto
+        # mechanism (user_provisioning_guard_registry); the domain policy lives
+        # in this plugin. Idempotent so a per-test-app re-enable never stacks
+        # duplicate guards.
+        from vbwd.registries.user_provisioning_guard_registry import (
+            register_user_provisioning_guard,
+            user_provisioning_guards,
+        )
+        from plugins.subscription.subscription.services.provisioning_guard import (
+            enforce_provisioning_limits,
+        )
+
+        if enforce_provisioning_limits not in user_provisioning_guards():
+            register_user_provisioning_guard(enforce_provisioning_limits)
+            logger.info("[subscription] Provisioning-limits guard registered")
+
         self._register_data_exchangers()
 
         # S77 — make plans and add-ons addressable by the generic tags /
@@ -506,11 +522,19 @@ class SubscriptionPlugin(BasePlugin):
                 SUBSCRIPTION_LISTING_TYPE_ID
             )
 
+        from vbwd.registries.user_provisioning_guard_registry import (
+            clear_user_provisioning_guards,
+        )
+
         clear_entitlement_provider()
         unregister_invoice_extra_fields_provider("subscription")
         clear_demo_data_hooks()
         unregister_deletion_dependency_provider("subscription")
         unregister_subscription_frontend_event_types()
+        # The core seam only exposes a clear-all; subscription is the sole guard
+        # contributor today, so clearing on disable restores the default-open
+        # provisioning path.
+        clear_user_provisioning_guards()
 
     def register_event_handlers(self, event_bus):
         import logging
