@@ -502,6 +502,7 @@ def admin_activate_subscription(subscription_id):
         balance_repo=TokenBalanceRepository(db.session),
         transaction_repo=TokenTransactionRepository(db.session),
         purchase_repo=TokenBundlePurchaseRepository(db.session),
+        session=db.session,
     )
     sub_service = SubscriptionService(
         subscription_repo=sub_repo, token_service=token_service

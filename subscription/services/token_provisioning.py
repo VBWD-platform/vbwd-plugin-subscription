@@ -1,25 +1,16 @@
 """Session-atomic token read/debit for the provisioning guard.
 
-Why this module exists (the atomicity nuance):
+A provisioning guard must NOT commit: core commits AFTER the whole provisioning
+transaction (user row + our debit) succeeds, and a later failure must roll our
+debit back with the user creation.
 
-Core's ``TokenService.debit_tokens`` decrements the balance through
-``BaseRepository.save``, which calls ``session.commit()`` — it is NOT
-session-atomic. A provisioning guard must NOT commit: core commits AFTER the
-whole provisioning transaction (user row + our debit) succeeds, and a later
-failure must roll our debit back with the user creation. So we:
-
-  - READ the balance through the core ``TokenService.get_balance`` (a pure read,
-    safe to reuse verbatim), and
-  - DEBIT by mutating the balance row and appending a ``TokenTransaction`` on the
-    SHARED session WITHOUT committing — matching how core debits (balance
-    decrement + negative-amount transaction row), but leaving the commit to
-    core. The single home for the ledger shape stays core's models; we only
-    withhold the commit.
+Core's ``TokenService`` used to commit unconditionally, so this module debited
+by hand on the shared session to withhold that commit — bypassing the service,
+and with it every token-movement hook. Since S138.0 the service takes
+``commit=False``, so both calls here are plain core ``TokenService`` calls: one
+home for the ledger shape, hooks fire, and the commit still belongs to core.
 """
-from uuid import UUID, uuid4
-
-from vbwd.models.enums import TokenTransactionType
-from vbwd.models.user_token_balance import TokenTransaction, UserTokenBalance
+from uuid import UUID
 
 
 def _as_uuid(value) -> UUID:
@@ -27,8 +18,8 @@ def _as_uuid(value) -> UUID:
     return value if isinstance(value, UUID) else UUID(str(value))
 
 
-def read_operator_balance(session, acting_user_id) -> int:
-    """Return the operator's current token balance via core ``TokenService``."""
+def _token_service(session):
+    """Build a core ``TokenService`` bound to the caller's shared session."""
     from vbwd.repositories.token_bundle_purchase_repository import (
         TokenBundlePurchaseRepository,
     )
@@ -38,12 +29,17 @@ def read_operator_balance(session, acting_user_id) -> int:
     )
     from vbwd.services.token_service import TokenService
 
-    token_service = TokenService(
+    return TokenService(
         TokenBalanceRepository(session),
         TokenTransactionRepository(session),
         TokenBundlePurchaseRepository(session),
+        session,
     )
-    return token_service.get_balance(_as_uuid(acting_user_id))
+
+
+def read_operator_balance(session, acting_user_id) -> int:
+    """Return the operator's current token balance via core ``TokenService``."""
+    return _token_service(session).get_balance(_as_uuid(acting_user_id))
 
 
 def debit_operator_tokens(
@@ -51,32 +47,19 @@ def debit_operator_tokens(
 ) -> None:
     """Debit ``amount`` tokens on the SHARED session WITHOUT committing.
 
-    Deliberately does NOT reuse ``TokenService.debit_tokens`` because that path
-    self-commits (see the module docstring): committing here would make the
-    debit survive even if the user creation later fails. Instead we mutate the
-    balance row and append the negative-amount ledger entry on the caller's
-    transaction — core commits (or rolls back) the whole unit atomically.
+    ``commit=False`` composes the debit into the caller's transaction: the
+    balance moves and the hooks fire on the open transaction, but core owns the
+    commit — so a later failure rolls the debit back with the user creation.
 
-    The caller has already verified the balance is sufficient.
+    The caller has already verified the balance is sufficient; ``debit_tokens``
+    re-checks and raises ``ValueError`` on a race.
     """
-    user_uuid = _as_uuid(acting_user_id)
-    balance = (
-        session.query(UserTokenBalance)
-        .filter(UserTokenBalance.user_id == user_uuid)
-        .first()
-    )
-    if balance is None or balance.balance < amount:
-        # Defensive: the caller checks first, so reaching here means a race.
-        raise ValueError("Insufficient token balance")
+    from vbwd.models.enums import TokenTransactionType
 
-    balance.balance -= amount
-    session.add(
-        TokenTransaction(
-            id=uuid4(),
-            user_id=user_uuid,
-            amount=-amount,
-            transaction_type=TokenTransactionType.USAGE,
-            description=description,
-        )
+    _token_service(session).debit_tokens(
+        user_id=_as_uuid(acting_user_id),
+        amount=amount,
+        transaction_type=TokenTransactionType.USAGE,
+        description=description,
+        commit=False,
     )
-    session.flush()
