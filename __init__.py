@@ -108,6 +108,7 @@ class SubscriptionPlugin(BasePlugin):
                 "/api/v1/addons/": "Public subscription add-on catalog for pricing pages.",
                 "/api/v1/addons/<addon_id>": "Public single add-on detail.",
                 "/api/v1/subscription/public/checkout-draft/<token>": "Checkout-draft resolve; token is the key.",
+                "/api/v1/subscription/config": "Public subscription config — only the explicitly-whitelisted settings the pricing/checkout UI needs pre-login.",
             },
         )
 
