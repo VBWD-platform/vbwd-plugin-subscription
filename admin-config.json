@@ -107,7 +107,7 @@
           "label": "User's default tarif plan category in dashboard",
           "component": "input",
           "inputType": "text",
-          "description": "Slug of the TariffPlanCollection CMS widget shown on the user's /dashboard/plans page. Create the widget in CMS → Widgets, then paste its slug here."
+          "description": "Slug shown on the user's /dashboard/plans page. Accepts either a TariffPlanCollection CMS widget slug (create it in CMS → Widgets, then paste its slug) OR a tarif-plan category slug — a category slug renders that category's plans directly. Leave blank to show all plans."
         }
       ]
     }
