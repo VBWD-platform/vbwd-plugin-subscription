@@ -34,6 +34,16 @@ jobs:
           repository: VBWD-platform/vbwd-plugin-bot-base
           path: vbwd-backend/plugins/bot_base
 
+      # ── 2c. Clone email (subscription declares dependencies=["email"]) ────
+      # Without it PluginManager refuses to enable subscription — "Cannot
+      # enable 'subscription': dependency 'email' is not enabled" — so its
+      # blueprint never mounts and the route tests assert against 404.
+      - name: Clone email dependency
+        uses: actions/checkout@v4
+        with:
+          repository: VBWD-platform/vbwd-plugin-email
+          path: vbwd-backend/plugins/email
+
       # ── 3. Style checks (black · flake8 · mypy) ───────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -72,6 +82,16 @@ jobs:
             echo "No src/ directory — skipping mypy."
           fi
 
+      # ── 3b. Enable every cloned plugin BEFORE anything boots ──────────────
+      # plugins/plugins.json is gitignored, so a fresh checkout has none and the
+      # app falls back to plugins.json.dist, which does not list subscription.
+      # It then never enables, its blueprint never mounts, and the route tests
+      # assert against 404. Writing the manifest up front means the api and the
+      # `test` container both come up with the cloned set enabled.
+      - name: Create plugins.json (enable all present plugins)
+        working-directory: vbwd-backend
+        run: python3 ci/write_plugins_manifest.py
+
       # ── 4. Start docker compose stack (API + postgres + redis) ────────────
       - name: Start services
         working-directory: vbwd-backend
@@ -80,18 +100,21 @@ jobs:
       # ── 5. Install and activate plugin ────────────────────────────────────
       - name: Enable all present plugins
         working-directory: vbwd-backend
+        # Enable by PluginMetadata.name, not directory — they differ for the bot
+        # plugins (bot_base -> "bot-base"), and `plugins enable bot_base` exits 0
+        # while persisting a key the loader cannot resolve. The exclude list
+        # still matches on the directory.
         run: |
           EXCLUDE_FILE="ci/plugins-enable-exclude.txt"
-          for d in plugins/*/; do
-            name=$(basename "$d")
-            [ -f "${d}__init__.py" ] || continue
-            if [ -f "$EXCLUDE_FILE" ] && grep -qxF "$name" "$EXCLUDE_FILE"; then
-              echo "Skipping CI-excluded plugin: $name"; continue
+          while IFS=$'\t' read -r dir name; do
+            [ -n "$dir" ] || continue
+            if [ -f "$EXCLUDE_FILE" ] && grep -qxF "$dir" "$EXCLUDE_FILE"; then
+              echo "Skipping CI-excluded plugin: $dir"; continue
             fi
             docker compose exec -T api flask --app "vbwd:create_app()" plugins enable "$name" \
               && echo "Plugin $name enabled." \
               || echo "Plugin $name already enabled or not registerable — continuing."
-          done
+          done < <(python3 ci/plugin_names.py)
       - name: Run unit tests
         working-directory: vbwd-backend
         run: |
