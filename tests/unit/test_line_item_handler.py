@@ -8,7 +8,11 @@ from vbwd.events.line_item_registry import LineItemContext
 from plugins.subscription.subscription.handlers.line_item_handler import (
     SubscriptionLineItemHandler,
 )
-from vbwd.models.enums import LineItemType, SubscriptionStatus
+from vbwd.models.enums import (
+    LineItemType,
+    SubscriptionStatus,
+    TokenTransactionType,
+)
 
 
 @pytest.fixture()
@@ -92,6 +96,75 @@ class TestActivateSubscription:
 
         assert result.success is True
         assert subscription.status == SubscriptionStatus.ACTIVE
+
+
+class TestCreditPlanDefaultTokens:
+    """The plan's default_tokens must be credited THROUGH the TokenService seam
+    (S138.0), never by mutating a balance row or building a TokenTransaction here.
+    """
+
+    def _subscription_with_default_tokens(self, default_tokens):
+        subscription = MagicMock()
+        subscription.id = uuid4()
+        subscription.status = SubscriptionStatus.PENDING
+        subscription.tarif_plan = MagicMock()
+        subscription.tarif_plan.name = "Gold"
+        subscription.tarif_plan.billing_period = "MONTHLY"
+        subscription.tarif_plan.features = {"default_tokens": default_tokens}
+        subscription.tarif_plan.categories = []
+        return subscription
+
+    def test_credits_default_tokens_through_token_service(
+        self, handler, context, container
+    ):
+        subscription = self._subscription_with_default_tokens(50)
+        container.subscription_repository.return_value.find_by_id.return_value = (
+            subscription
+        )
+
+        result = handler.activate_line_item(
+            _make_line_item(LineItemType.SUBSCRIPTION), context
+        )
+
+        assert result.success is True
+        assert result.data["tokens_credited"] == 50
+
+        token_service = container.token_service.return_value
+        token_service.credit_tokens.assert_called_once_with(
+            user_id=context.user_id,
+            amount=50,
+            transaction_type=TokenTransactionType.SUBSCRIPTION,
+            reference_id=subscription.id,
+            description="Plan tokens: Gold",
+        )
+
+    def test_does_not_touch_token_repositories_directly(
+        self, handler, context, container
+    ):
+        subscription = self._subscription_with_default_tokens(50)
+        container.subscription_repository.return_value.find_by_id.return_value = (
+            subscription
+        )
+
+        handler.activate_line_item(_make_line_item(LineItemType.SUBSCRIPTION), context)
+
+        container.token_balance_repository.return_value.save.assert_not_called()
+        container.token_transaction_repository.return_value.save.assert_not_called()
+
+    def test_no_tokens_credited_when_default_tokens_zero(
+        self, handler, context, container
+    ):
+        subscription = self._subscription_with_default_tokens(0)
+        container.subscription_repository.return_value.find_by_id.return_value = (
+            subscription
+        )
+
+        result = handler.activate_line_item(
+            _make_line_item(LineItemType.SUBSCRIPTION), context
+        )
+
+        assert result.data["tokens_credited"] == 0
+        container.token_service.return_value.credit_tokens.assert_not_called()
 
 
 class TestActivateAddon:

@@ -5,7 +5,6 @@ Extracted from CoreLineItemHandler (Sprint 04b).
 """
 import logging
 from datetime import timedelta
-from uuid import uuid4
 
 from vbwd.events.line_item_registry import (
     ILineItemHandler,
@@ -236,27 +235,14 @@ class SubscriptionLineItemHandler(ILineItemHandler):
         if default_tokens <= 0:
             return 0
 
-        from vbwd.models.user_token_balance import UserTokenBalance, TokenTransaction
-
-        token_repo = self._container.token_balance_repository()
-        token_transaction_repo = self._container.token_transaction_repository()
-
-        balance = token_repo.find_by_user_id(context.user_id)
-        if not balance:
-            balance = UserTokenBalance(id=uuid4(), user_id=context.user_id, balance=0)
-        balance.balance += default_tokens
-        token_repo.save(balance)
-
-        transaction = TokenTransaction(
-            id=uuid4(),
+        token_service = self._container.token_service()
+        token_service.credit_tokens(
             user_id=context.user_id,
             amount=default_tokens,
             transaction_type=TokenTransactionType.SUBSCRIPTION,
             reference_id=subscription.id,
             description=f"Plan tokens: {subscription.tarif_plan.name}",
         )
-        token_transaction_repo.save(transaction)
-
         return default_tokens
 
     def _activate_addon(self, line_item, context: LineItemContext) -> LineItemResult:
