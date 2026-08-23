@@ -121,3 +121,12 @@ TDD-first · DevOps-first · SOLID · DI · DRY · Liskov · clean code · **no
 overengineering** (narrowest change that satisfies the requirement). The quality
 gate is `bin/pre-commit-check.sh` — `--full` green on every touched repo means
 "done". See `docs/dev_log/.../_engineering-requirements.md` in the SDK root.
+
+## Documentation
+
+Full platform documentation lives at **[vbwd.cc/docs](https://vbwd.cc/docs)**.
+
+- [Plugin system](https://vbwd.cc/docs-plugin-system) — how backend plugins are registered, enabled, and configured
+- [Subscriptions](https://vbwd.cc/docs-core-subscription) — documentation for this plugin's domain
+- [Architecture](https://vbwd.cc/docs-architecture) — platform layering and the core-agnosticism rule
+- [Getting started](https://vbwd.cc/docs-getting-started) — install a VBWD instance and enable plugins
