@@ -110,6 +110,25 @@
           "description": "Slug shown on the user's /dashboard/plans page. Accepts either a TariffPlanCollection CMS widget slug (create it in CMS → Widgets, then paste its slug) OR a tarif-plan category slug — a category slug renders that category's plans directly. Leave blank to show all plans."
         }
       ]
+    },
+    {
+      "id": "public_pages",
+      "label": "Public Pages",
+      "fields": [
+        {
+          "key": "plans_slug",
+          "label": "Public plans URL slug",
+          "component": "input",
+          "inputType": "text",
+          "description": "Base path of the public plan pages: the list at /<slug> and each plan at /<slug>/<plan-slug> (default: plans). Pick a slug no CMS page uses. Reload fe-user after a change; in theme mode also restart the api."
+        },
+        {
+          "key": "seo_index_tarif_plans",
+          "label": "Index tarif plans",
+          "component": "checkbox",
+          "description": "List the public plan pages in the sitemap and let search engines index them (off: noindex,follow and no sitemap entries)"
+        }
+      ]
     }
   ]
 }

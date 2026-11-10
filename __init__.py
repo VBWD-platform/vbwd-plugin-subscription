@@ -37,7 +37,34 @@ DEFAULT_CONFIG = {
     # /dashboard/plans page. Empty (default) => the page falls back to the
     # widget's default "all plans" mode, preserving classic behaviour.
     "dashboard_plans_widget_slug": "",
+    # ── public tarif-plan pages (S154 D10) ───────────────────────────────────
+    # fe-user (both frontend modes) serves the public plan list at
+    # ``/<plans_slug>`` and each plan at ``/<plans_slug>/<plan_slug>``.
+    "plans_slug": "plans",
+    # Whether those pages are indexable: sitemap entries + ``index,follow``.
+    "seo_index_tarif_plans": True,
 }
+
+# cms's sitemap registry module. cms is an OPTIONAL dependency (S154 D3): it is
+# resolved lazily so subscription enables and runs with cms absent.
+CMS_SITEMAP_REGISTRY_MODULE = "plugins.cms.src.services.seo_registry"
+
+
+def cms_sitemap_registry():
+    """cms's sitemap registry module, or ``None`` when cms is not installed."""
+    import importlib
+
+    try:
+        return importlib.import_module(CMS_SITEMAP_REGISTRY_MODULE)
+    except ImportError:
+        return None
+
+
+def _container_tarif_plan_repository():
+    """The request-scoped tarif-plan repository from the DI container."""
+    from flask import current_app
+
+    return current_app.container.tarif_plan_repository()
 
 
 BOT_NAMESPACE = "subscription"
@@ -114,6 +141,45 @@ class SubscriptionPlugin(BasePlugin):
                 ),
             },
         )
+
+    def fe_user_route_prefixes(self) -> List[str]:
+        """The public routes fe-user subscription mounts (S154 D10): the plan
+        pages under ``/<plans_slug>``, read from the live config on every call.
+
+        The base is operator-configurable, so it is never hardcoded. A
+        server-side renderer that hands unknown paths back to the SPA discovers
+        this method by shape; subscription imports none of it.
+        """
+        from plugins.subscription.subscription.services.plugin_config import (
+            public_plans_path,
+        )
+
+        return [public_plans_path()]
+
+    def _register_sitemap_provider(self, sitemap_registry) -> None:
+        """Contribute the public plan pages to cms's sitemap (no-op without cms).
+
+        The provider never imports cms: cms's ``SitemapEntry`` is injected here,
+        at the wiring root. Registration is idempotent by provider name.
+        """
+        if sitemap_registry is None:
+            return
+        from plugins.subscription.subscription.sitemap_provider import (
+            TarifPlanSitemapProvider,
+        )
+
+        self._sitemap_provider = TarifPlanSitemapProvider(
+            plan_repository_factory=_container_tarif_plan_repository,
+            entry_factory=sitemap_registry.SitemapEntry,
+        )
+        sitemap_registry.register_sitemap_provider(self._sitemap_provider)
+
+    def _unregister_sitemap_provider(self, sitemap_registry) -> None:
+        """Mirror of ``_register_sitemap_provider`` (no-op without cms)."""
+        sitemap_provider = getattr(self, "_sitemap_provider", None)
+        if sitemap_registry is None or sitemap_provider is None:
+            return
+        sitemap_registry.unregister_sitemap_provider(sitemap_provider)
 
     def get_blueprint(self):
         from plugins.subscription.subscription.routes import subscription_bp
@@ -302,6 +368,9 @@ class SubscriptionPlugin(BasePlugin):
 
         register_entitlement_provider(SubscriptionEntitlementProvider())
         logger.info("[subscription] Entitlement provider registered")
+
+        # S154 D10 — the public plan pages in the cms sitemap (cms optional, D3).
+        self._register_sitemap_provider(cms_sitemap_registry())
 
         from vbwd.services.invoice_extra_fields_registry import (
             register_invoice_extra_fields_provider,
@@ -531,6 +600,7 @@ class SubscriptionPlugin(BasePlugin):
         )
 
         clear_entitlement_provider()
+        self._unregister_sitemap_provider(cms_sitemap_registry())
         unregister_invoice_extra_fields_provider("subscription")
         clear_demo_data_hooks()
         unregister_deletion_dependency_provider("subscription")

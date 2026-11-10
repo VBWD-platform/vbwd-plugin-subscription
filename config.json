@@ -9,5 +9,7 @@
   "checkout_link_base_url": "",
   "checkout_draft_ttl_seconds": 900,
   "marketplace_enabled": false,
-  "dashboard_plans_widget_slug": ""
+  "dashboard_plans_widget_slug": "",
+  "plans_slug": "plans",
+  "seo_index_tarif_plans": true
 }

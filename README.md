@@ -115,6 +115,24 @@ plugins/subscription/
 - **Permissions.** `admin_permissions` and `user_permissions` properties declare
   the `subscription.*` permission keys consumed by routes and by both frontends.
 
+- **Public plan pages (S154 D10).** Active plans get public, indexable pages in
+  both frontend modes: the list at `/<plans_slug>` and each plan at
+  `/<plans_slug>/<plan_slug>` (checkout stays under `/dashboard`). `plans_slug`
+  (default `plans`) and `seo_index_tarif_plans` (default on) are in
+  `config.json` and the fe-admin "Public Pages" tab; fe-user reads both from
+  `GET /api/v1/subscription/config` at install time. Pick a `plans_slug` no CMS
+  page uses: the plan pages win over a CMS page at the same path. After changing
+  it, reload fe-user; in theme mode also restart the api (theme pages mount at
+  boot). The plugin declares `/<plans_slug>` through `fe_user_route_prefixes()`
+  so a server-side renderer hands it to the SPA when no theme adapter owns it.
+
+- **Sitemap provider `subscription-plans`** ([`sitemap_provider.py`](subscription/sitemap_provider.py)).
+  Registered into cms's sitemap registry whenever cms is installed (cms is
+  optional; subscription works without it). It lists `/<plans_slug>` plus one URL
+  per active plan, DB-paged (`COUNT` + `ORDER BY id OFFSET/LIMIT`), `lastmod` from
+  `updated_at`; `count()` is 0 while `seo_index_tarif_plans` is off. The chunk
+  URL is `/sitemap-subscription-plans-<n>.xml`.
+
 ## Engineering requirements (binding)
 
 TDD-first · DevOps-first · SOLID · DI · DRY · Liskov · clean code · **no

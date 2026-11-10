@@ -61,7 +61,32 @@ class TestSubscriptionPublicConfigEndpoint:
 
         assert response.status_code == 200
         body = response.get_json()
-        assert set(body.keys()) == {"dashboard_plans_widget_slug"}
+        assert set(body.keys()) == {
+            "dashboard_plans_widget_slug",
+            "plans_slug",
+            "seo_index_tarif_plans",
+        }
+
+    def test_exposes_the_public_plan_pages_base_and_switch(self):
+        # S154 D10 — fe-user mounts /<plans_slug> and sets the robots from these.
+        flask_app = _make_app(
+            {"plans_slug": "/pricing/", "seo_index_tarif_plans": False}
+        )
+
+        with flask_app.test_client() as client:
+            body = client.get("/api/v1/subscription/config").get_json()
+
+        assert body["plans_slug"] == "pricing"
+        assert body["seo_index_tarif_plans"] is False
+
+    def test_public_plan_pages_defaults(self):
+        flask_app = _make_app({})
+
+        with flask_app.test_client() as client:
+            body = client.get("/api/v1/subscription/config").get_json()
+
+        assert body["plans_slug"] == "plans"
+        assert body["seo_index_tarif_plans"] is True
 
     def test_is_public_no_auth_required(self):
         flask_app = _make_app({"dashboard_plans_widget_slug": "plans"})
