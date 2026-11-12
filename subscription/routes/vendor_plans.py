@@ -24,6 +24,10 @@ from plugins.subscription.subscription.repositories.tarif_plan_repository import
 )
 from plugins.subscription.subscription.routes import subscription_bp
 from plugins.subscription.subscription.services.plugin_config import marketplace_enabled
+from plugins.subscription.subscription.services.seo_indexnow import (
+    notify_plan_changed,
+    notify_plan_renamed,
+)
 
 
 _BILLING_PERIODS = ("MONTHLY", "YEARLY", "ONE_TIME")
@@ -107,6 +111,7 @@ def vendor_create_plan():
     except ValueError as validation_error:
         return jsonify({"error": str(validation_error)}), 400
 
+    notify_plan_changed(saved_plan.slug)
     return jsonify({"plan": saved_plan.to_dict(), "message": "Plan created"}), 201
 
 
@@ -153,6 +158,7 @@ def vendor_update_plan(plan_id):
     if error:
         return error
 
+    previous_slug = plan.slug
     data = request.get_json() or {}
 
     if "billing_period" in data:
@@ -199,6 +205,10 @@ def vendor_update_plan(plan_id):
     except ValueError as validation_error:
         return jsonify({"error": str(validation_error)}), 400
 
+    if previous_slug and previous_slug != saved_plan.slug:
+        notify_plan_renamed(previous_slug, saved_plan.slug)
+    else:
+        notify_plan_changed(saved_plan.slug)
     return jsonify({"plan": saved_plan.to_dict()}), 200
 
 
@@ -218,8 +228,10 @@ def vendor_delete_plan(plan_id):
     if error:
         return error
 
+    plan_slug = plan.slug
     repository.delete(plan.id)
     invalidate_plan_cache()
+    notify_plan_changed(plan_slug)
     return jsonify({"success": True}), 200
 
 

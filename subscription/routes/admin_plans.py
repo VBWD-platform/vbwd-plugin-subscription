@@ -23,6 +23,9 @@ from plugins.subscription.subscription.models.tarif_plan import (
 from vbwd.models.enums import SubscriptionStatus
 from plugins.subscription.subscription.cache_keys import invalidate_plan_cache
 from plugins.subscription.subscription.routes import subscription_bp
+from plugins.subscription.subscription.services.seo_indexnow import (
+    notify_plan_changed,
+)
 
 
 class TaxAssignmentError(ValueError):
@@ -165,6 +168,7 @@ def admin_create_plan():
         plan_repo = TarifPlanRepository(db.session)
         saved_plan = plan_repo.save(plan)
         invalidate_plan_cache()
+        notify_plan_changed(saved_plan.slug)
 
         return (
             jsonify(
@@ -266,6 +270,7 @@ def admin_update_plan(plan_id):
 
     saved_plan = plan_repo.save(plan)
     invalidate_plan_cache()
+    notify_plan_changed(saved_plan.slug)
 
     return jsonify({"plan": saved_plan.to_dict()}), 200
 
@@ -305,8 +310,10 @@ def admin_delete_plan(plan_id):
             400,
         )
 
+    plan_slug = plan.slug
     plan_repo.delete(plan_id)
     invalidate_plan_cache()
+    notify_plan_changed(plan_slug)
 
     return jsonify({"message": "Plan deleted successfully"}), 200
 
@@ -337,6 +344,7 @@ def admin_deactivate_plan(plan_id):
     plan.is_active = False
     saved_plan = plan_repo.save(plan)
     invalidate_plan_cache()
+    notify_plan_changed(saved_plan.slug)
 
     return jsonify({"plan": saved_plan.to_dict(), "message": "Plan deactivated"}), 200
 
@@ -365,6 +373,7 @@ def admin_activate_plan(plan_id):
     plan.is_active = True
     saved_plan = plan_repo.save(plan)
     invalidate_plan_cache()
+    notify_plan_changed(saved_plan.slug)
 
     return jsonify({"plan": saved_plan.to_dict(), "message": "Plan activated"}), 200
 
